@@ -1,7 +1,7 @@
 # Lernraum
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-09-24
+Zuletzt geprüft: 2026-10-23
 [English version](learner-workspace.en.md)
 
 ![Lernraum mit Material und Aufgabe](../assets/readme/learner-workspace.jpg)
@@ -20,10 +20,10 @@ Der Lernraum ist die zentrale Arbeitsfläche der Lernenden. Er hält Kurs, Lernw
 ## Schritt für Schritt
 
 1. Die lernende Person öffnet **„Lernraum“** und wählt unter **„Aktuelle Kurse“** einen Kurs.
-2. Sie öffnet eine sichtbare Lerneinheit. Bei modularen Lerneinheiten zeigt der Graph den Lernweg und die Zustände der einzelnen Knoten.
+2. Sie öffnet eine sichtbare Lerneinheit. Bei modularen Lerneinheiten zeigt der Graph den Lernweg und die Zustände der einzelnen Knoten. Auf schmalen Bildschirmen bis einschließlich 64 rem erscheint stattdessen eine nach Phasen geordnete Modulliste mit denselben Zugriffsregeln.
 3. Sie wählt einen offenen Knoten beziehungsweise Abschnitt. Materialien und Aufgaben erscheinen in der Arbeitsfläche.
 4. Markdown-Texte werden direkt gelesen. Dateien werden über **„Datei öffnen“** geladen. Eine interaktive Simulation wird bewusst mit **„Simulation starten“** geöffnet und kann zurückgesetzt oder geschlossen werden.
-5. Eine Aufgabe wird in derselben Arbeitsfläche geöffnet. Die Bearbeitung kann mit **„Pausieren“** verlassen und später wieder aufgenommen werden, soweit der gespeicherte Zustand dies unterstützt.
+5. Eine Aufgabe öffnet ihren Arbeitsraum mit Rückweg zum Modul beziehungsweise zu den Inhalten. Weitere Kontextaktionen stehen im Menü der Kopfzeile. Die Bearbeitung kann später wieder aufgenommen werden, soweit der gespeicherte Zustand dies unterstützt; ein ungesendeter Textentwurf bleibt an den aktuellen Tab gebunden.
 6. Für Übungsmodule wechselt die lernende Person über **„Üben“** in den gesonderten Wiederholungsablauf.
 
 ## Lernendensicht
@@ -33,6 +33,10 @@ Lernende sehen nur eigene aktive Kurse, zugeordnete Lerneinheiten und zugänglic
 Materialien, Aufgabe, eigene frühere Abgaben und Rückmeldungen werden kontextbezogen dargestellt. Interne technische IDs, Musterlösungen, Kriterien und Lehrkraft-Kontext werden nicht als versteckte Hilfen ausgeliefert.
 
 Bei H5P-Aufgaben unterscheidet GUSTAV ausdrücklich zwischen **„Noch nicht bearbeitet“**, **„Noch nicht abgeschlossen“** und **„Abgeschlossen“**. Abgeschlossen ist eine H5P-Aufgabe erst, wenn mindestens einmal die volle Punktzahl erreicht wurde. Der zusätzlich angezeigte Punktestand stammt immer aus dem neuesten Versuch; ein späterer Teilversuch nimmt einen früher erreichten Abschluss nicht zurück.
+
+**„Vollbild“** vergrößert eine H5P-Aufgabe innerhalb des Browsers. **„Vollbild verlassen“** oder Escape führt zurück; die bereits ausgewählten Antworten bleiben erhalten. Die Unterstützung ab iPadOS 15.3.1 bleibt bestehen.
+
+Die Modulansicht und der Aufgabenraum teilen dieselbe Inhaltsnavigation. Auf schmalen Bildschirmen öffnet **„Inhalt“** das Verzeichnis. Im Aufgabenraum liegen Materialien und eigene frühere Abgaben im gemeinsamen Materialien-Bereich.
 
 ## So funktioniert es
 

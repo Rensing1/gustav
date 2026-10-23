@@ -28,6 +28,25 @@ const stopFormTransport: SubmitFunction = ({ cancel }) => cancel();
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 describe("LearningTaskCard", () => {
+  it("offers feedback for new text after a reviewed image and protects the reviewed answer", async () => {
+    render(LearningTaskCard, { props: {
+      courseId: "course-1", learnerSub: "student-1", task: { ...task, has_submission: true },
+      unitType: "linear", expanded: true, submissionFocused: true, initialSubmissionMode: "upload",
+      history: [{ id: validReviewedSubmissionId, attempt_nr: 1, kind: "image", intent: "feedback",
+        created_at: "2026-10-22T12:00:00Z", analysis_status: "completed", feedback_md: "Bitte begründen.",
+        files: [{ mime: "image/png", size: 1024, url: "/synthetic.png" }] }]
+    } });
+    await fireEvent.click(screen.getByLabelText("Text schreiben"));
+    const editor = document.querySelector('textarea[name="text_body"]')!;
+    await fireEvent.input(editor, { target: { value: "Meine neue schriftliche Begründung." } });
+    expect(screen.getByRole("button", { name: "Neue Rückmeldung einholen" })).toBeEnabled();
+    await fireEvent.click(screen.getByRole("button", { name: "Abgeben" }));
+    expect(screen.getByRole("dialog", { name: "Überarbeitung noch nicht geprüft" })).toBeVisible();
+    await fireEvent.click(screen.getByRole("button", { name: "Weiter überarbeiten" }));
+    await fireEvent.input(editor, { target: { value: "   " } });
+    expect(screen.queryByRole("button", { name: "Neue Rückmeldung einholen" })).not.toBeInTheDocument();
+  });
+
   it.each([true, false])("weights new and draft actions equally (compact=%s)", (compactLayout) => {
     for (const intent of [null, "feedback", "submit"] as const) {
       const label = intent === null ? "Aufgabe 3 beginnen" : intent === "feedback" ? "Entwurf weiterbearbeiten" : "Erneut bearbeiten";

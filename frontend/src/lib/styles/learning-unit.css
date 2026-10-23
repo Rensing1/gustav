@@ -2297,10 +2297,12 @@
   box-shadow: none;
 }
 
-/* The non-modal dialog contributes no extra box; showModal keeps the player in place. */
+/* One class works with and without a native dialog top layer on older iPads. */
 .h5p-fullscreen-host { display: contents; }
-.h5p-fullscreen-host:modal {
+.h5p-fullscreen-host--active {
+  display: block;
   position: fixed;
+  z-index: 1000;
   inset: 0;
   width: 100%;
   height: 100vh;
@@ -2323,12 +2325,11 @@
   background: var(--color-bg-surface);
 }
 .h5p-fullscreen-toolbar { display: flex; justify-content: flex-end; }
-.h5p-fullscreen-host:modal .h5p-task-player { height: 100%; display: flex; flex-direction: column; }
-.h5p-fullscreen-host:modal .h5p-task-viewport { flex: 1; min-height: 0; overflow: auto; max-height: none; }
-.h5p-fullscreen-host:modal .h5p-fullscreen-toolbar,
-.h5p-fullscreen-host:modal .h5p-view-controls,
-.h5p-fullscreen-host:modal .h5p-status { flex-shrink: 0; }
-body:has(.h5p-fullscreen-host:modal) { overflow: hidden; }
+.h5p-fullscreen-host--active .h5p-task-player { height: 100%; display: flex; flex-direction: column; }
+.h5p-fullscreen-host--active .h5p-task-viewport { flex: 1; min-height: 0; overflow: auto; max-height: none; }
+.h5p-fullscreen-host--active .h5p-fullscreen-toolbar,
+.h5p-fullscreen-host--active .h5p-view-controls,
+.h5p-fullscreen-host--active .h5p-status { flex-shrink: 0; }
 
 .h5p-task-viewport { min-width: 0; max-width: 100%; }
 .h5p-task-viewport--scrollable { overflow: auto; max-height: none; overscroll-behavior: auto; }

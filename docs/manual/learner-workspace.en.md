@@ -1,7 +1,7 @@
 # Learning workspace
 
 GUSTAV-Version: 0.0.4
-Last verified: 2026-09-24
+Last verified: 2026-10-23
 [Deutsche Version](learner-workspace.de.md)
 
 ![Learning workspace with material and task](../assets/readme/learner-workspace.jpg)
@@ -20,10 +20,10 @@ The learning workspace is the central workspace for learners. It keeps the cours
 ## Step by step
 
 1. The learner opens **„Lernraum“** (“Learning workspace”) and selects a course under **„Aktuelle Kurse“** (“Current courses”).
-2. They open a visible learning unit. In modular learning units, the graph shows the learning path and the states of individual nodes.
+2. They open a visible learning unit. In modular learning units, the graph shows the learning path and the states of individual nodes. On narrow screens up to and including 64 rem, a module list grouped by phase provides the same access rules.
 3. They select an open node or section. Materials and tasks appear in the workspace.
 4. Markdown texts are read directly. Files are loaded using **„Datei öffnen“** (“Open file”). An interactive simulation is deliberately opened with **„Simulation starten“** (“Start simulation”) and can be reset or closed.
-5. A task is opened in the same workspace. Learners can leave it using **„Pausieren“** (“Pause”) and resume it later where the saved state supports this.
+5. A task opens its workspace with a return action to the module or contents. Further context actions are available in the header menu. Learners can resume work where the saved state supports this; an unsent text draft remains tied to the current tab.
 6. For practice modules, learners use **„Üben“** (“Practice”) to enter the separate review workflow.
 
 ## Learner view
@@ -33,6 +33,10 @@ Learners see only their own active courses, assigned learning units, and accessi
 Materials, a task, the learner's own previous submissions, and feedback are displayed in context. Internal technical IDs, sample solutions, criteria, and teacher context are not delivered as hidden aids.
 
 For H5P tasks, GUSTAV explicitly distinguishes **“Not attempted”**, **“Not completed”**, and **“Completed”**. An H5P task is completed only after full points have been achieved at least once. The score shown with the status always belongs to the newest attempt; a later partial attempt does not revoke an earlier completion.
+
+**„Vollbild“** (“Fullscreen”) enlarges an H5P task within the browser. **„Vollbild verlassen“** (“Leave fullscreen”) or Escape returns to the embedded view while preserving selected answers. Support starts at iPadOS 15.3.1 as before.
+
+Module and task views share the same content navigation. On narrow screens, **„Inhalt“** (“Contents”) opens the outline. In the task workspace, materials and previous submissions share the materials area.
 
 ## How it works
 

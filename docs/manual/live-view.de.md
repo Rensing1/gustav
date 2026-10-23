@@ -1,7 +1,7 @@
 # Live-Ansicht
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-08-20
+Zuletzt geprüft: 2026-10-23
 [English version](live-view.en.md)
 
 ## Zweck
@@ -20,10 +20,10 @@ Die Live-Ansicht unterstützt die Lehrkraft während einer laufenden Unterrichts
 
 1. Öffne **„Unterrichten“** oder direkt **„Live“**.
 2. Wähle unter **„Kurs“** den gewünschten Kurs und anschließend unter **„Lerneinheit“** die aktuelle Einheit.
-3. Wähle **„Live öffnen“**. Die Tabelle zeigt Lernende, Fortschritt, Durchschnitt und letzte Abgabe.
-4. Sortiere die Übersicht bei Bedarf nach Schülerbezeichnung oder letzter Abgabe.
-5. Wähle eine Schülerzeile. Rechts erscheinen Aufgabenleiste und Detailansicht.
-6. Wechsle zwischen **„Abgabe“** und **„Rückmeldung“**. Bei Dialogaufgaben kann auch der berechtigungsgeprüfte Dialogverlauf erscheinen.
+3. Wähle **„Live öffnen“**. Die Matrix ordnet Lernaufgaben nach Modul beziehungsweise Abschnitt. **„Stand“** zeigt abgegebene Aufgaben und Durchschnitt; **„Üben“** zählt neue/fällige und aktuell sichere Übungsaufgaben.
+4. Wechsle bei Bedarf zwischen **„Aufgaben“** und **„Üben“**. Auf schmalen Bildschirmen begrenzt die Modulauswahl die sichtbaren Spalten.
+5. Wähle eine Aufgaben- oder Übungszelle. Unter der Tabelle erscheinen Aufgabenleiste und Detailansicht. Die nummerierten Aufgabenflächen erlauben den Wechsel innerhalb des Lernendenkontexts.
+6. Öffne **„Abgabe“**, **„Rückmeldung“** oder **„Auswertung“**. Aufgabenstellung und Antwort stehen untereinander; bei Dialogaufgaben ist auch der berechtigungsgeprüfte Verlauf erreichbar.
 7. Lass die Ansicht während der Arbeitsphase geöffnet; neue Zustände werden regelmäßig nachgeladen.
 
 ## Lernendensicht
@@ -42,7 +42,7 @@ Durchschnitt und Fortschritt dienen der Orientierung im Unterricht. Sie fassen v
 - Die Detailfläche konzentriert sich auf die letzte Abgabe; sie ersetzt keine vollständige Abgabehistorie.
 - Ein Durchschnitt ist keine automatisch erzeugte Note und darf nicht ohne fachliche Einordnung verwendet werden.
 - Ohne zugeordnete Lerneinheit oder Abgaben bleibt die Ansicht leer beziehungsweise zeigt **„Noch keine Abgabe“**.
-- Übungszustände besitzen derzeit keine eigene Live-Auswertung.
+- Übungszustände erscheinen getrennt von Lernaufgaben; sie fließen nicht in Fortschritt und Durchschnitt der Lernaufgaben ein.
 - Aktualisierung erfolgt regelmäßig, aber nicht als garantierte sekundengenaue Echtzeitübertragung.
 
 ## Typische Probleme

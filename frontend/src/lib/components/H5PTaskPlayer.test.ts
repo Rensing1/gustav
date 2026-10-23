@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +25,54 @@ describe("H5PTaskPlayer", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps the player and restores focus and background without native dialog APIs", async () => {
+    // JSDOM deliberately supplies the same missing APIs as the legacy profile.
+    for (const method of ["show", "showModal", "close"] as const) {
+      expect(HTMLDialogElement.prototype[method]).toBeUndefined();
+    }
+    expect("inert" in HTMLElement.prototype).toBe(false);
+    const background = document.createElement("button");
+    background.textContent = "Outside";
+    background.setAttribute("aria-hidden", "false");
+    background.style.pointerEvents = "auto";
+    document.body.append(background);
+    const previousOverflow = document.body.style.overflow;
+    const view = render(H5PTaskPlayer, { courseId: "course-1", taskId: "task-a", contentId: "content-a" });
+    try {
+      await waitFor(() => expect(document.querySelector("h5p-player")).toBeInTheDocument());
+      const player = document.querySelector("h5p-player");
+      const opener = screen.getByRole("button", { name: "Vollbild" });
+      for (const closeWith of ["Escape", "button"] as const) {
+        opener.focus();
+        await fireEvent.click(opener);
+        const dialog = screen.getByRole("dialog", { name: "H5P-Aufgabe" });
+        await waitFor(() => expect(dialog).toHaveAttribute("aria-modal", "true"));
+        expect(background).toHaveAttribute("aria-hidden", "true");
+        expect(background.style.pointerEvents).toBe("none");
+        expect(document.body.style.overflow).toBe("hidden");
+        expect(screen.getByRole("button", { name: "Vollbild verlassen" })).toHaveFocus();
+        background.focus();
+        expect(screen.getByRole("button", { name: "Vollbild verlassen" })).toHaveFocus();
+        if (closeWith === "Escape") await fireEvent.keyDown(window, { key: "Escape" });
+        else await fireEvent.click(screen.getByRole("button", { name: "Vollbild verlassen" }));
+        await waitFor(() => expect(dialog).not.toHaveAttribute("aria-modal", "true"));
+        expect(opener).toHaveFocus();
+        expect(document.querySelector("h5p-player")).toBe(player);
+        expect(background).toHaveAttribute("aria-hidden", "false");
+        expect(background.style.pointerEvents).toBe("auto");
+        expect(document.body.style.overflow).toBe(previousOverflow);
+      }
+      await fireEvent.click(opener);
+      view.unmount();
+      expect(background).toHaveAttribute("aria-hidden", "false");
+      expect(document.body.style.overflow).toBe(previousOverflow);
+    } finally {
+      view.unmount();
+      background.remove();
+    }
   });
 
   it("creates a fresh player when remounted with another task", async () => {

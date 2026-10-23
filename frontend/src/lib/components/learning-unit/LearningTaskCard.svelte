@@ -553,9 +553,10 @@
 
   function hasUnreviewedTextChanges(): boolean {
     const baseline = currentReviewedBaseline();
-    return editorMode === "text"
-      && baseline?.kind === "text"
-      && normalizeReviewedSubmissionText(draftText) !== normalizeReviewedSubmissionText(baseline.textBody);
+    if (editorMode !== "text" || !baseline) return false;
+    // A text answer replacing a reviewed file needs its own feedback, too.
+    const reviewedText = baseline.kind === "text" ? baseline.textBody : "";
+    return normalizeReviewedSubmissionText(draftText) !== normalizeReviewedSubmissionText(reviewedText);
   }
 
   function editingLocked(): boolean {

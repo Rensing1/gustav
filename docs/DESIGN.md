@@ -6,7 +6,7 @@ Dieses Dokument ist der verbindliche Designvertrag für die Svelte-Oberfläche v
 
 Die am 18. Oktober 2026 abgestimmte Zielgestaltung ist eine ruhige, moderne Arbeitsoberfläche mit vertrauten SaaS-Mustern. Grundlage ist der besprochene Gestaltungsentwurf für Modulansicht und Aufgabenraum mit 8 px Rundung der Inhaltsflächen und 16 px Abstand zwischen Arbeitsbereichen. Die verbindlichen Regeln sind hier vollständig beschrieben; der Vertrag benötigt keinen Zugriff auf den Chatentwurf.
 
-Die Preview-Route `/ui-lab` bleibt die visuelle Referenzfläche für die Umsetzung. Gemeinsame Tokens sowie Modulansicht und Aufgabenraum werden als erste Produktflächen auf diesen Vertrag umgestellt. Die vollständige Sichtabnahme und die Aktualisierung der Referenzbilder stehen noch aus; andere Produktbereiche sind damit nicht vollständig überarbeitet. Das Stitch-Projekt `7234666190356643774` und `Gustav Logic` dokumentieren die vorherige Gestaltung; sie überstimmen die neue Formensprache nicht. Referenzbilder werden erst nach bewusster Umsetzung und visueller Prüfung aktualisiert.
+Die Preview-Route `/ui-lab` bleibt die visuelle Referenzfläche. Gemeinsame Tokens, Navigation und produktive Arbeitsansichten wurden auf diesen Vertrag umgestellt. Der [Abgleich vom 22. Oktober 2026](plan/2026-10-22-ui-gesamtpruefung-commits.md) dokumentiert die Sichtprüfung und 102 aktualisierte Referenzbilder. Dies ist keine Abnahme einer alten Safari-Engine; die reale Geräteprüfung für iPadOS 15.3.1 bleibt separat offen. Frühere Entwürfe überstimmen die hier beschriebenen Regeln nicht. Künftige Referenzänderungen erfordern weiterhin eine bewusste Umsetzung und visuelle Prüfung.
 
 Die Prüfung `frontend/src/lib/styles/token-ownership.test.ts` sichert für die globalen Stylesheets ab, dass Schrift-, Farb-, Radius-, Abstands- und Layouttokens ausschließlich in `theme-tokens.css` definiert werden und alle entsprechenden Referenzen auflösbar sind. Lokale Komponentenstyles sind noch nicht vollständig durch diese Prüfung abgedeckt. Im Dialog verwenden Produkt und UI-Labor denselben `DialogMessage`-Baustein; das Labor nutzt außerdem den produktiven Aufgaben-/Kontextbaustein und Spaltentrenner. Das ersetzt keine vollständige Prüfung aller Produktseiten.
 
@@ -46,6 +46,8 @@ DragQuestion startet in „Lesbare Ansicht“: Die tatsächliche Renderbreite wi
 
 Nur die beschriftete Aufgabenfläche scrollt horizontal. Native Scrollbedienung bleibt erhalten; zusätzliche Ziehgesten zum Verschieben dürfen das Antwortziehen nicht überlagern. Tastaturfokus macht das aktive Aufgabenelement innerhalb der Arbeitsfläche sichtbar. Ansichtssteuerung und H5P-Auswertung bleiben voneinander unabhängig; Zoomen erzeugt weder Antworten noch Bewertungen.
 
+„Vollbild“ vergrößert die bestehende Player-Instanz auf die Browserfläche; Antworten und laufender Zustand bleiben erhalten. „Vollbild verlassen“ und Escape führen zurück und stellen den Fokus wieder her. Hintergrundbedienung und Seitenscrollen sind währenddessen gesperrt. Diese Regeln gelten auch auf iPadOS 15.3.1 ohne native Dialog-APIs und ohne `inert`, `:modal` oder `:has()`. Moderne Browser dürfen ihre native Dialogebene verwenden; die Gestaltung folgt in beiden Fällen derselben Zustandsklasse und den gemeinsamen Tokens.
+
 ### Reparaturvertrag: Live, Diagnostik und Mitglieder
 
 Live und Diagnostik verwenden die vorhandenen Workspace-Flächen, Felder und Aktionsvarianten. Lange Kurs-, Einheiten- und Personennamen dürfen nur innerhalb dafür vorgesehener Tabellenbereiche horizontales Scrollen erfordern, niemals für die ganze Seite. Tabellenbereiche sind beschriftet und per Tastatur erreichbar; schmale Ansichten ordnen Übersicht und Details untereinander an. Reiter besitzen lesbare aktive, Hover- und Fokuszustände in beiden Darstellungen.
@@ -72,10 +74,9 @@ Auf schmalen Flächen begrenzt eine Modulauswahl die sichtbaren Spalten; Tabelle
 und Detail stehen untereinander. Horizontaler Überlauf bleibt auf den
 beschrifteten Tabellenbereich begrenzt. Aufgabenstellung, Abgabe, Rückmeldung
 und Auswertung bleiben aus Lern- und Übungszellen über denselben Detailbereich
-erreichbar. Die ausdrücklich vereinbarte dichte `LiveTaskStrip`-Ausnahme im
-Detailpanel bleibt davon unberührt.
+erreichbar. Die Aufgabenleiste im Detailpanel verwendet die nummerierten Bedienflächen aus Abschnitt 5; die frühere Miniaturfeld-Ausnahme ist abgelöst.
 
-Die Live-Tabelle und das Schülerdetail stehen auch auf großen Bildschirmen untereinander und nutzen dieselbe volle Arbeitsbreite. Innerhalb des Details stehen Aufgabenstellung und Antwortbereich auf breiten Flächen nebeneinander, auf schmalen untereinander. Die Aufgabenbreiten bleiben kompakt; zusätzliche Arbeitsbreite streckt die Bewertungszellen nicht.
+Die Live-Tabelle und das Schülerdetail stehen auch auf großen Bildschirmen untereinander und nutzen dieselbe volle Arbeitsbreite. Innerhalb des Details folgen Aufgabenstellung und Antwortbereich ebenfalls untereinander. Die Tabelle nutzt mindestens die verfügbare Breite; bei vielen Aufgaben scrollt ausschließlich der Tabellenbereich horizontal.
 
 GUSTAV ist eine ruhige, moderne Arbeitsanwendung. Vertraute SaaS-Muster für Navigation, Formulare, Reiter, Dialoge und Arbeitsflächen erleichtern die Bedienung und eine konsistente Umsetzung durch Menschen und KI-Agenten.
 
@@ -641,23 +642,18 @@ Bilder erscheinen klein und unverzerrt; PDFs und andere Dateien beginnen mit tat
   Öffnen der Liste sind alle einzelnen Kriterien zunächst geschlossen.
 - `Rückmeldung einholen` wechselt nicht auf eine andere Seite. Während der
   Verarbeitung sind Editor, Antwortform, Dateiauswahl und Abgabeaktionen
-  gesperrt. Sowohl `Rückmeldung einholen` als auch `Endgültig abgeben` zeigen
+  gesperrt. Sowohl `Rückmeldung einholen` als auch `Abgeben` zeigen
   unmittelbar einen sichtbaren Verarbeitungsstatus und verhindern weitere
   Abgabeversuche. Erfolg bleibt in der Aufgabenfläche erkennbar; bereinigte
   Fehler erscheinen dort mit einer möglichen nächsten Aktion. Nach
   erfolgreicher Verarbeitung und beim direkten Öffnen der Ergebnisansicht
   öffnet sich `Rückmeldung` inline, ohne den Tastaturfokus ungefragt zu
   verschieben. Manuelles Schließen wird durch Polling nicht rückgängig gemacht.
-  Der flache Abschnitt `Dein nächster Schritt` bündelt danach die eigentliche
-  Entscheidung: `Überarbeiten` ist die formative Hauptaktion und
-  `Endgültig abgeben` die bewusste Abschlussaktion. `Überarbeiten` verschiebt
+  Der flache Aktionsbereich bündelt danach die Entscheidung: `Abgeben` schließt die geprüfte Fassung ab, `Überarbeiten` bleibt als Nebenaktion erreichbar. `Überarbeiten` verschiebt
   den Fokus erst nach einer ausdrücklichen Aktivierung zum Texteditor
   beziehungsweise Dateifeld. Die Abschlussaktion wird nicht zusätzlich unter
   dem Editor wiederholt.
-- Weicht die sichtbare Fassung vom zuletzt rückgemeldeten Snapshot ab, bleibt
-  die bisherige Rückmeldung lesbar, aber `Endgültig abgeben` ist mit dem Hinweis
-  `Für diese Fassung zuerst Rückmeldung einholen.` deaktiviert. Nach der
-  Finalisierung bleibt der Aufgabenraum sichtbar und wird schreibgeschützt.
+- Bei einer Textänderung gegenüber dem geprüften Snapshot, auch nach dem Wechsel von Bild zu Text, bleibt die bisherige Rückmeldung lesbar und `Neue Rückmeldung einholen` erreichbar. `Abgeben` öffnet dann die Warnung `Überarbeitung noch nicht geprüft`: `Weiter überarbeiten` kehrt zur Eingabe zurück; `Trotzdem abgeben` finalisiert ausdrücklich den zuvor geprüften Snapshot. Eine neu ausgewählte Datei benötigt zuerst Rückmeldung und sperrt die Abschlussaktion. Nach der Finalisierung bleibt der Aufgabenraum sichtbar und wird schreibgeschützt.
   `Aufgabe abgeschlossen` führt bei einer anderen noch offenen Aufgabe im selben
   Modul zurück zur Modulansicht, andernfalls zum Lernpfad. Eine Aufgabe mit
   formativer Rückmeldung, aber ohne endgültige Abgabe, gilt weiterhin als offen;
@@ -732,33 +728,29 @@ und Eingabe eine dialogspezifische Form.
 
 Verbindliche Regeln:
 
-- Der Abschlussauftrag wird erst nach der bewussten Aktion `Dialog beenden`
-  sichtbar.
+- Die Abfolge „Gespräch → Abschlussaufgabe → Abgabe“ kündigt einen vorhandenen Abschlussauftrag früh an. `Zur Abschlussaufgabe` öffnet dessen Bearbeitung; ohne Abschlussauftrag heißt die Aktion `Zur Abgabe`.
 - Die linke Spalte zeigt wie bei anderen Aufgaben zuerst `Aufgabe N · KI-Dialog`
   und die Aufgabenstellung, anschließend den unveränderten gemeinsamen
   Materialbrowser. Dialogeigene Partnerkarten, Sonderrahmen und abweichende
   Materialflächen sind dort nicht zulässig.
 - Partnername, Antwortmodus und Rundenstand stehen im Dialogkopf rechts.
-  `Dialog ohne Abgabe abbrechen`, `Pausieren` und `Dialog beenden` gehören zu den
+  `Dialog ohne Abgabe abbrechen`, optional `Pausieren` und `Zur Abschlussaufgabe` beziehungsweise `Zur Abgabe` gehören zu den
   Sitzungsaktionen im Hauptbereich und werden nicht in der Materialspalte
   dargestellt.
 - Ein fehlgeschlagener KI-Turn mit verbleibenden Generierungsversuchen zeigt
   `KI-Antwort erneut versuchen` und, sofern bereits eine Runde abgeschlossen
-  wurde, weiterhin `Dialog beenden`. Nach dem dritten Fehlversuch entfällt die
+  wurde, weiterhin `Zur Abschlussaufgabe` beziehungsweise `Zur Abgabe`. Nach dem dritten Fehlversuch entfällt die
   Wiederholungsaktion vollständig; Abschluss beziehungsweise erlaubter Abbruch
   bleiben als erreichbare Auswege sichtbar.
-- `Antwort senden` steht ausschließlich unmittelbar beim Eingabefeld. In der
-  Abschlussphase stehen `Zurück zum Dialog` und `Endgültig abgeben` beim
-  Abschlussfeld.
+- `Antwort senden` steht ausschließlich unmittelbar beim Eingabefeld. In der Abschlussphase stehen `Zurück zum Gespräch` und `Gespräch und Antwort abgeben` beim Abschlussfeld. Ohne Abschlussauftrag heißt die abschließende Aktion `Gespräch abgeben`.
 - Der Hauptbereich beginnt mit Partnername, Modus, dem sichtbaren Text `Runde X
   von N` und einem zugänglichen Fortschrittsbalken. Er zeigt ausschließlich den
-  tatsächlichen Rundenstand und erfindet keine fachlichen Dialogphasen.
+  tatsächlichen Rundenstand. Die angekündigte Abfolge beschreibt zusätzlich die vorhandenen Schritte bis zur Abgabe; sie verändert keine fachlichen Sitzungszustände.
 - Auf breiten Flächen besteht der Hauptbereich aus drei Zeilen: Fortschritt,
   intern scrollbarer Verlauf und Eingabe beziehungsweise Abschluss. Nach dem
   Laden, einer neuen KI-Antwort und einer Größenänderung bleibt die aktuelle
   Frage vollständig sichtbar; der Tastaturfokus wird dabei nicht verschoben.
-- KI-Beiträge stehen links in einer ruhig grün getönten Gesprächsfläche;
-  Schülerbeiträge stehen rechts in einer zurückhaltend akzentgetönten Fläche.
+- KI-Beiträge stehen links mit ruhiger Rollenbeschriftung; Schülerbeiträge stehen rechts auf einer dezenten neutralen Fläche.
   Dekorative Seitenleisten und zusätzliche Innenrahmen sind im Dialog verboten.
 - Genau die jüngste beantwortbare KI-Nachricht trägt die sichtbare Kennzeichnung
   `Aktuelle Frage` und eine stärkere Kontur. Frühere Beiträge bleiben vollständig
@@ -792,6 +784,12 @@ Verbindliche Regeln:
 - Das UI-Labor zeigt Gespräch und Abschluss jeweils als vollwertige
   Referenzfläche in Light und Dark sowie auf Desktop, Tablet und Smartphone.
 
+Im laufenden Gespräch bleiben sämtliche Beiträge ohne Aufklappen zugänglich. Ada steht links mit ruhiger Rollenbeschriftung; eigene Antworten stehen rechts auf einer dezenten neutralen Fläche. Farbbalken und dekorative Avatare entfallen. Nach der Abgabe steht die Abschlussantwort zuerst. In der Ergebnisansicht ist die Rückmeldung geöffnet; Verlauf und Auswertung lassen sich unabhängig aufklappen. Fehlende Abschlussantworten erzeugen keinen leeren Platzhalter. Die vollständige Referenzlesefassung bleibt verfügbar.
+
+Der optionale Abschlussauftrag wird im KI-Dialog früh durch die kurze Abfolge „Gespräch → Abschlussaufgabe → Abgabe“ angekündigt. Aktionen benennen den nächsten Schritt: „Zur Abschlussaufgabe“, ohne Abschlussauftrag „Zur Abgabe“. Der Auftrag steht sowohl beim Schreiben als auch in der gespeicherten Abgabe direkt bei der eigenen Antwort. „Fazit“ oder „Zusammenfassung“ werden nicht pauschal unterstellt. Gesprächsbeiträge bleiben Teil der Abgabe.
+
+Abgeschlossene KI-Dialoge verwenden dieselbe Abgabedarstellung wie die Modulansicht. Auftrag und eigene Abschlussantwort bleiben sichtbar; Rückmeldung ist in der Ergebnisansicht geöffnet, der Verlauf aufklappbar. Die Ergebnisansicht wächst mit dem Inhalt statt die Gesprächsfläche auf volle Höhe zu strecken. Eine sichtbare Rückkehraktion nutzt das bestehende Rücksprungziel. Ergebnisadressen laden ausschließlich die Sitzung der zugehörigen Abgabe und starten keinen neuen Dialog.
+
 ### Reparaturvertrag: Wiederholung und Druckfassung
 
 Eine Aufgabenpräsentation mit `presentation_number > 1` trägt sichtbar „Wiederholung“. Ein kurzer Text erklärt, dass dieselbe Aufgabe erneut geübt wird und die bisherigen Antworten erhalten bleiben. Der Hinweis bleibt bei Antwort und Rückmeldung sichtbar; die erste Präsentation erhält ihn nicht. Zähler, Bewertungslogik und gespeicherte Antworten werden dafür nicht verändert. Darstellung und Abstände nutzen die vorhandenen Practice- und Textbausteine.
@@ -810,7 +808,7 @@ In der Druckfassung erhalten Abschnitts-/Modulüberschriften einen einheitlichen
 
 - Mobile Headeraktionen bilden ein Paar: Theme-Schalter und Benutzerbutton teilen dieselbe Höhe von 44 px und mindestens 44 × 44 px Bedienfläche. Die Desktophöhe bleibt unverändert.
 - „Aufgabe beginnen“ und „Entwurf weiterbearbeiten“ sind gleich gewichtete orange Hauptaktionen. Erst „Erneut bearbeiten“ nach endgültiger Abgabe bleibt dezent; die Zustandsmarkierung der Aufgabenzeile ist davon unabhängig.
-- Die Live-Aufgabenübersicht übernimmt auf ausdrücklichen Wunsch wieder das dichte ursprüngliche Raster aus `origin/master` (`3edfcc26`): 0,85 rem breite, mindestens 1,15 rem hohe farbige Rechtecke mit 0,28 rem Rasterabstand. Keine großen Buttons, zusätzlichen Zielbereichsabstände oder dauerhaften Modulüberschriften. Die zuerst geplante 24-/44-px-Aufweitung entfällt auch mobil; kleine Touch-Ziele bleiben damit eine bekannte Ausnahme. Die ursprüngliche Light-/Dark-Zustandspalette sowie Auswahl- und Letztabgabemarkierungen bleiben erhalten. Eine gemeinsame Beschriftung zeigt Modul, Nummer und Zustand bei Tastaturfokus, sonst Hover, sonst Auswahl. Reihenfolge und Bewertungssemantik bleiben unverändert. Diese Ausnahme betrifft nur die Leiste, nicht die übrige rechte Spalte.
+- Historisch: Die Miniaturfeld-Ausnahme vom 12. September ist durch die am 22. Oktober eingeführten nummerierten Bedienflächen abgelöst. Maßgeblich sind Abschnitt 5 und der Vertrag „Live, Diagnostik und Mitglieder“; die alte Ausnahme ist keine aktuelle Implementierungsvorgabe.
 
 ## 12. Auth und Preview
 
@@ -834,16 +832,17 @@ In der Druckfassung erhalten Abschnitts-/Modulüberschriften einen einheitlichen
 
 `frontend/src/lib/styles/index.css` ist der einzige globale CSS-Einstiegspunkt. Er importiert die Stylesheets in folgender Reihenfolge:
 
-1. `reset`
-2. `tokens`
-3. `base`
-4. `typography`
-5. `primitives`
-6. `learning`
-7. `practice`
-8. `teaching`
-9. `auth`
-10. `overrides`
+1. `theme-tokens.css`
+2. `app.css`
+3. `typography.css`
+4. `ui-primitives.css`
+5. `learning-unit.css`
+6. `practice.css`
+7. `teaching-workspace.css`
+8. `auth-theme.css`
+9. `overrides.css`
+10. `navigation.css`
+11. `teacher-theme.css`
 
 Die Importreihenfolge ist die lesbare Ordnungs- und Prioritätsregel für den Quellcode. GUSTAV verwendet hier bewusst keine CSS Cascade Layers: Safari auf iPadOS 15.3 versteht sie noch nicht und würde sonst fast das gesamte globale Stylesheet verwerfen. Ein Build-Gate parst alle erzeugten Client-Stylesheets und bricht ab, falls dort trotzdem eine `@layer`-Regel oder ein mit `layer(...)` qualifizierter `@import` vorkommt. Dadurch erhalten alte und aktuelle Browser dasselbe einfache CSS ohne browserspezifischen Sonderpfad.
 
@@ -857,7 +856,7 @@ Verbindliche Regeln:
 - Benachbarte Bedienelemente mit derselben Funktionsebene teilen gemeinsame Chrom-Regeln; Theme- und Account-Schalter der Top-Bar sind die Referenz dafür.
 - Die ehemalige warme Papier-/Petrolpalette darf nicht lokal über hart codierte Werte zurückkehren.
 
-Das UI-Labor und ausgewählte vollständige Arbeitsansichten besitzen freigegebene Light- und Dark-Referenzbilder für Desktop und Mobil. Diese dokumentieren bis zur expliziten visuellen Migration den bisherigen Implementierungsstand. Die Zielgestaltung wird zunächst an Modulansicht und Aufgabenraum umgesetzt und geprüft, anschließend über gemeinsame Komponenten auf weitere Flächen übertragen; eine bloße Aktualisierung der Referenzbilder ersetzt keine Prüfung. Der Moduleditor wird als echte, authentifizierte Arbeitsansicht bei 1920 × 1080, 1024 × 768 und 390 × 844 Pixeln geprüft. `make test-visual-smoke` vergleicht diese Referenzen, während `make update-visual-baselines` ausschließlich für eine beabsichtigte und anschließend visuell geprüfte Designänderung verwendet wird.
+Das UI-Labor und ausgewählte vollständige Arbeitsansichten besitzen am 22. Oktober 2026 abgeglichene Light- und Dark-Referenzbilder für Desktop und Mobil. Sie dokumentieren den geprüften Implementierungsstand. Bei weiteren Änderungen ersetzt eine bloße Aktualisierung der Referenzbilder keine Sichtprüfung. Der Moduleditor wird als echte, authentifizierte Arbeitsansicht bei 1920 × 1080, 1024 × 768 und 390 × 844 Pixeln geprüft. `make test-visual-smoke` vergleicht diese Referenzen, während `make update-visual-baselines` ausschließlich für eine beabsichtigte und anschließend visuell geprüfte Designänderung verwendet wird.
 
 
 ### Seitenkomposition der Lernansichten
@@ -873,15 +872,8 @@ Die Modulnavigation folgt der Reihenfolge der Leseansicht: Materialien, dann Auf
 
 Bis einschließlich 64 rem startet die Navigation geschlossen als kompakte Zeile „Inhalt“ mit aktuellem Modulnamen. Nach Auswahl eines Eintrags schließt sie und fokussiert den Zielinhalt. Auf größeren Ansichten bleibt die Navigation sichtbar. Zielpositionen berücksichtigen die feste Kopfzeile, Einträge und Gruppen bleiben mindestens 44 px hoch.
 
-### KI-Dialoge
-Im laufenden Gespräch bleiben sämtliche Beiträge ohne Aufklappen zugänglich. Ada steht links mit ruhiger Rollenbeschriftung; eigene Antworten stehen rechts auf einer dezenten neutralen Fläche. Farbbalken und dekorative Avatare entfallen. Nach der Abgabe steht die Abschlussantwort zuerst. Gesprächsverlauf, Rückmeldung und Auswertung lassen sich unabhängig aufklappen. Fehlende Abschlussantworten erzeugen keinen leeren Platzhalter. Die vollständige Referenzlesefassung bleibt verfügbar.
-
-Der optionale Abschlussauftrag wird im KI-Dialog früh durch die kurze Abfolge „Gespräch → Abschlussaufgabe → Abgabe“ angekündigt. Aktionen benennen den nächsten Schritt: „Zur Abschlussaufgabe“, ohne Abschlussauftrag „Zur Abgabe“. Der Auftrag steht sowohl beim Schreiben als auch in der gespeicherten Abgabe direkt bei der eigenen Antwort. „Fazit“ oder „Zusammenfassung“ werden nicht pauschal unterstellt. Gesprächsbeiträge bleiben Teil der Abgabe.
-
 ### Gemeinsame Seitennavigation
 Modulansicht und Aufgabenräume verwenden dieselbe `WorkspaceOutline` für Modulgruppen, Materialzeilen, Symbole und aktive Auswahl. Dialog-, Text- und Dateiaufgaben binden sie über `LearnerTaskContext` ein. Materialien stehen vor eigenen Abgaben. Im Aufgabenraum öffnet die Auswahl den gemeinsamen Referenzleser; die Rückkehr führt zur laufenden Bearbeitung. Auf schmalen Bildschirmen bleibt die Navigation im vorhandenen Materialien-Bereich direkt sichtbar, ohne eine zusätzliche Einklappebene. Dialogspezifische Layoutregeln dürfen keine eigene Navigationsoptik erzeugen.
-
-Abgeschlossene KI-Dialoge verwenden dieselbe Abgabedarstellung wie die Modulansicht. Auftrag und eigene Abschlussantwort bleiben sichtbar; Rückmeldung ist in der Ergebnisansicht geöffnet, der Verlauf aufklappbar. Die Ergebnisansicht wächst mit dem Inhalt statt die Gesprächsfläche auf volle Höhe zu strecken. Eine sichtbare Rückkehraktion nutzt das bestehende Rücksprungziel. Ergebnisadressen laden ausschließlich die Sitzung der zugehörigen Abgabe und starten keinen neuen Dialog.
 
 ### Auth-Formulare
 

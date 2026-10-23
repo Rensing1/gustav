@@ -1,7 +1,7 @@
 # Live view
 
 GUSTAV-Version: 0.0.4
-Last verified: 2026-08-20
+Last verified: 2026-10-23
 [Deutsche Version](live-view.de.md)
 
 ## Purpose
@@ -20,10 +20,10 @@ The live view supports the teacher during an ongoing lesson. It shows the curren
 
 1. Open **„Unterrichten“** (“Teaching”) or go directly to **„Live“** (“Live”).
 2. Under **„Kurs“** (“Course”), select the desired course and then select the current unit under **„Lerneinheit“** (“Learning unit”).
-3. Select **„Live öffnen“** (“Open live view”). The table displays learners, progress, average, and most recent submission.
-4. If necessary, sort the overview by learner label or most recent submission.
-5. Select a learner row. The task bar and detail view appear on the right.
-6. Switch between **„Abgabe“** (“Submission”) and **„Rückmeldung“** (“Feedback”). For dialogue tasks, the permission-checked dialogue history may also appear.
+3. Select **„Live öffnen“** (“Open live view”). The matrix groups learning tasks by module or section. **„Stand“** shows submitted tasks and average; **„Üben“** counts new/due and currently secure practice tasks.
+4. Switch between **„Aufgaben“** (“Tasks”) and **„Üben“** (“Practice”). On narrow screens, the module selector limits the visible columns.
+5. Select a task or practice cell. The task bar and detail view appear below the table. Numbered task controls allow switching within the selected learner's context.
+6. Open **„Abgabe“** (“Submission”), **„Rückmeldung“** (“Feedback”), or **„Auswertung“** (“Evaluation”). Instructions and answers are stacked vertically; dialogue tasks also provide the permission-checked conversation history.
 7. Keep the view open during the lesson; new states are reloaded regularly.
 
 ## Learner view
@@ -42,7 +42,7 @@ Average and progress provide orientation during lessons. They summarise availabl
 - The detail area focuses on the most recent submission; it does not replace a complete submission history.
 - An average is not an automatically generated grade and must not be used without professional interpretation.
 - Without an assigned learning unit or submissions, the view remains empty or displays **„Noch keine Abgabe“** (“No submission yet”).
-- Practice states do not currently have their own live evaluation.
+- Practice states are displayed separately and do not contribute to learning-task progress or averages.
 - Updates occur regularly but are not guaranteed to be transmitted in real time to the second.
 
 ## Common problems

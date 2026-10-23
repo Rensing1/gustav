@@ -2,6 +2,7 @@
   import { browserUUID } from "$lib/utils/browser-uuid";
   import { onMount } from "svelte";
   import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
+  import { modalFocus } from "$lib/components/ui/modal-focus";
   import { loadH5PWebcomponentsModule } from "$lib/runtime/h5p-webcomponents";
   import type { H5PPersistedResult } from "$lib/types/h5p";
   import type { LearningSubmission } from "$lib/types/learning";
@@ -30,26 +31,38 @@
   let fullscreenButton: HTMLButtonElement | undefined;
   let fullscreen = $state(false);
 
-  // A modal fills the browser viewport while keeping the same H5P instance alive.
+  /** Enlarge the existing player, including on iPadOS without native dialog APIs. */
   function toggleFullscreen() {
-    if (fullscreen) fullscreenDialog?.close();
+    if (fullscreen) leaveFullscreen();
     else if (fullscreenDialog) {
-      // The dialog is open non-modally during the regular page layout. Native
-      // dialogs must be closed before they can enter the modal top layer.
-      fullscreenDialog.close();
-      fullscreenDialog?.showModal();
+      // Modern browsers provide a top layer. The CSS/focus fallback needs neither method.
+      if (typeof fullscreenDialog.close === "function" && typeof fullscreenDialog.showModal === "function") {
+        fullscreenDialog.close();
+        fullscreenDialog.showModal();
+      }
       fullscreen = true;
     }
   }
 
   function leaveFullscreen() {
-    // Ignore the queued close event when the same dialog has already entered
-    // the modal top layer. A real exit restores its visible non-modal state.
-    if (fullscreenDialog?.open) return;
+    if (!fullscreen) return;
     fullscreen = false;
-    fullscreenDialog?.show();
-    fullscreenButton?.focus();
+    fullscreenDialog?.close?.();
+    // Keep the embedded player visible without requiring HTMLDialogElement.show().
+    fullscreenDialog?.setAttribute("open", "");
   }
+
+  $effect(() => {
+    if (!fullscreen || !fullscreenDialog) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focus = modalFocus(fullscreenDialog, leaveFullscreen);
+    return () => {
+      focus.destroy();
+      document.body.style.overflow = previousOverflow;
+      fullscreenButton?.focus();
+    };
+  });
 
   let root: HTMLDivElement | undefined;
   let region: HTMLDivElement | undefined;
@@ -320,7 +333,8 @@
   });
 </script>
 
-<dialog open bind:this={fullscreenDialog} class="h5p-fullscreen-host" class:h5p-fullscreen-host--active={fullscreen} aria-label="H5P-Aufgabe" onclose={leaveFullscreen}>
+<!-- svelte-ignore a11y_no_redundant_roles (Legacy browsers and modalFocus need an explicit dialog role.) -->
+<dialog open bind:this={fullscreenDialog} class="h5p-fullscreen-host" class:h5p-fullscreen-host--active={fullscreen} role="dialog" aria-modal={fullscreen ? "true" : undefined} aria-label="H5P-Aufgabe" oncancel={(event) => { event.preventDefault(); leaveFullscreen(); }}>
 <div class="h5p-task-player">
   <div class="h5p-fullscreen-toolbar">
     <button bind:this={fullscreenButton} type="button" class="workspace-button workspace-button--ghost" aria-expanded={fullscreen} onclick={toggleFullscreen}>{fullscreen ? "Vollbild verlassen" : "Vollbild"}</button>

@@ -1,7 +1,7 @@
 # Abgaben und Rückmeldung
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-08-23
+Zuletzt geprüft: 2026-10-23
 [English version](submissions-and-feedback.en.md)
 
 ![Formative Rückmeldung im Lernraum](../assets/readme/formative-feedback.jpg)
@@ -22,13 +22,15 @@ GUSTAV trennt formative Rückmeldung von der endgültigen Abgabe. Lernende könn
 1. Die lernende Person verfasst eine Antwort oder wählt eine passende Datei aus.
 2. Mit **„Rückmeldung einholen“** wird die aktuelle Fassung als unveränderlicher Versuch gespeichert und zur Auswertung vorgemerkt.
 3. Während der Verarbeitung zeigt GUSTAV einen laufenden Zustand. Nach Abschluss öffnet sich **„Rückmeldung“**. Die zugehörigen Bewertungen lassen sich darin über **„Kriterien im Detail“** nachvollziehen.
-4. Unter **„Dein nächster Schritt“** kann die lernende Person mit **„Überarbeiten“** direkt zum Texteditor oder Dateifeld zurückkehren oder die unveränderte Fassung **„Endgültig abgeben“**.
-5. Eine geänderte Fassung benötigt erneut Rückmeldung. Nur wenn der aktuelle Entwurf genau der zuletzt geprüften Fassung entspricht, wird **„Endgültig abgeben“** ermöglicht.
+4. Mit **„Überarbeiten“** geht es zurück zum Texteditor oder Dateifeld. **„Abgeben“** gibt die bereits geprüfte Fassung endgültig ab.
+5. Für einen geänderten Text, eine neue Datei oder einen Wechsel von Bild zu Text ist **„Neue Rückmeldung einholen“** vorgesehen. Bei ungeprüften Textänderungen warnt **„Abgeben“**: **„Weiter überarbeiten“** führt zur Eingabe zurück; **„Trotzdem abgeben“** gibt ausdrücklich die zuvor geprüfte Fassung ab. Eine neue ausgewählte Datei benötigt zuerst Rückmeldung.
 6. Nach der endgültigen Abgabe ersetzt **„Aufgabe abgeschlossen“** die Bearbeitungsaktionen. Liegt im selben Modul noch eine andere offene Aufgabe, führt der Rückknopf zur Modulansicht; andernfalls führt er zum Lernpfad. In linearen Lerneinheiten führt er zurück zu den Inhalten.
 
 ## Lernendensicht
 
 Die Oberfläche unterscheidet den bearbeitbaren Entwurf von gespeicherten Versuchen. Frühere Abgaben lassen sich mit ihrer Rückmeldung und den Kriterien im Detail öffnen. `Kriterien im Detail` enthält eine nummerierte Liste; zunächst sind alle einzelnen Kriterien geschlossen und die jeweilige Begründung lässt sich bewusst aufklappen. Kriterien werden ohne Punktwerte als **„Mangelhaft“**, **„Ansatzweise“**, **„Gelungen“** oder **„Hervorragend“** beschrieben und zusätzlich durch eine dezente Farbmarke unterschieden. Die ausgeschriebene Stufe bleibt maßgeblich; Farbe ist nur eine visuelle Hilfe. Diese Begriffe beziehen sich ausschließlich auf das jeweilige Kriterium, nicht auf die lernende Person. Der Aktionsbereich ist bewusst flach gestaltet: Er trennt Rückmeldung, Entscheidung und Kriterien durch Abstand und feine horizontale Linien statt durch verschachtelte Kästen. Bei Dateiaufgaben werden Dateiname, Typ und verfügbare Vorschau angezeigt. Bei KI-Dialogen beendet die endgültige Abgabe den Dialog und löst die Abschlussauswertung aus.
+
+Bei KI-Dialogen kündigt **„Gespräch → Abschlussaufgabe → Abgabe“** einen vorhandenen Abschlussauftrag an. **„Zur Abschlussaufgabe“** öffnet dessen Bearbeitung; ohne Auftrag heißt die Aktion **„Zur Abgabe“**. **„Zurück zum Gespräch“** führt zurück. **„Gespräch und Antwort abgeben“** beziehungsweise **„Gespräch abgeben“** schließt den Dialog endgültig ab. In der Ergebnisansicht stehen Auftrag und eigene Abschlussantwort zuerst, die Rückmeldung ist geöffnet und der Verlauf aufklappbar.
 
 ## So funktioniert es
 
@@ -49,7 +51,7 @@ KI-Rückmeldung ist formativ. Sie soll zur Überarbeitung anregen und ist weder 
 
 ## Typische Probleme
 
-- **„Für diese Fassung zuerst Rückmeldung einholen“:** Der Entwurf wurde nach der letzten Rückmeldung verändert.
+- **„Überarbeitung noch nicht geprüft“:** Der Text wurde nach der letzten Rückmeldung verändert oder ersetzt eine geprüfte Datei. Hole eine neue Rückmeldung ein, damit die aktuelle Antwort endgültig abgegeben werden kann.
 - **Rückmeldung bleibt aus:** Warte zunächst auf den laufenden Zustand. Bei einem stabilen Fehler kann die Fassung erneut zur Rückmeldung eingereicht werden.
 - **Datei wird abgelehnt:** Verwende das für den Aufgabentyp erwartete Originalformat und wähle die Datei erneut aus.
 - **Doppelklick erzeugt keine zweite Abgabe:** Das ist beabsichtigter Schutz vor doppelten Versuchen.

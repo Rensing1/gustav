@@ -1,11 +1,14 @@
 import { openAppDestination } from "./support/app-navigation";
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
+import { registerE2EH5PContent } from "./support/e2e-run-state";
 import { newBrowserContext } from "./support/browser-context";
 import { expect, test, type Browser, type BrowserContext, type Page } from "./support/feature-test";
 
 import { currentUserSub, login } from "./support/auth";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
-import { seedLearnerDialogCourse, seedLearnerNavigationCourse, seedLearnerPracticeCourse } from "./support/seed-data";
+import { seedH5pVisualSmokeUnit, seedLearnerDialogCourse, seedLearnerNavigationCourse, seedLearnerPracticeCourse } from "./support/seed-data";
 import { findCascadeLayers } from "../tooling/css-compatibility.mjs";
 import { apiHeaders } from "./support/api";
 import { devices } from "@playwright/test";
@@ -44,6 +47,7 @@ async function authenticatedPage(browser: Browser, profile: Profile = "combined"
       constructor(form?: HTMLFormElement) { super(form); }
     };
     if (typeof HTMLDialogElement !== "undefined") {
+      remove(HTMLDialogElement.prototype, "show");
       remove(HTMLDialogElement.prototype, "showModal");
       remove(HTMLDialogElement.prototype, "close");
     }
@@ -190,6 +194,113 @@ async function roles(browser: Browser, profile: Profile) {
 }
 
 for (const profile of ["combined", "modern"] as const) {
+  test(`@feature-detail preserves H5P answers through fullscreen (${profile})`, async ({ browser }, info) => {
+    test.setTimeout(150_000);
+    const { teacher, learner } = await roles(browser, profile);
+    const page = learner.page;
+    const errors = trackErrors(page);
+    try {
+      const seeded = await seedH5pVisualSmokeUnit(teacher.page, page, `iPad-H5P ${Date.now()}`);
+      const root = resolve(process.cwd(), "..");
+      const pkg = execFileSync(resolve(root, ".venv/bin/python"), ["-c", [
+        "import io, pathlib, sys, zipfile", "buffer = io.BytesIO()",
+        "with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:",
+        "    for path in pathlib.Path(sys.argv[1]).rglob('*'):",
+        "        if path.is_file(): archive.write(path, path.relative_to(sys.argv[1]))",
+        "sys.stdout.buffer.write(buffer.getvalue())"
+      ].join("\n"), resolve(root, "frontend/e2e/fixtures/h5p-multichoice-design")]);
+      const imported = await teacher.page.request.post(`${webBase}/api/teaching/units/${seeded.unitId}/sections/${seeded.sectionId}/tasks/${seeded.taskId}/h5p/import`, {
+        headers: { origin: webBase }, multipart: { file: { name: "compatibility.h5p", mimeType: "application/zip", buffer: pkg } }
+      });
+      expect(imported.ok()).toBe(true);
+      registerE2EH5PContent(String((await imported.json()).h5p.content_id), e2eEmail("teacher"));
+      await page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}`);
+      await page.getByRole("button", { name: /beginnen/ }).first().click();
+      await expect(page.locator(".h5p-multichoice")).toBeVisible();
+      const player = await page.locator("h5p-player").elementHandle();
+      const answer = page.getByRole("radio", { name: /Vier/ });
+      await answer.press("Space");
+      const opener = page.getByRole("button", { name: "Vollbild", exact: true });
+      const host = page.locator(".h5p-fullscreen-host");
+      for (const closeWith of ["Escape", "button"] as const) {
+        if (closeWith === "button") {
+          await page.setViewportSize({ width: 768, height: 1024 });
+          await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+        }
+        await opener.click();
+        await expect(host).toHaveAttribute("aria-modal", "true");
+        const exit = page.getByRole("button", { name: "Vollbild verlassen", exact: true });
+        await expect(exit).toBeFocused();
+        await expect(host).toHaveCSS("position", "fixed");
+        const box = (await host.boundingBox())!;
+        expect(Math.abs(box.x)).toBeLessThanOrEqual(1);
+        expect(Math.abs(box.y)).toBeLessThanOrEqual(1);
+        expect(Math.abs(box.width - page.viewportSize()!.width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(box.height - page.viewportSize()!.height)).toBeLessThanOrEqual(1);
+        await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
+        // The global header is outside the modal even when native inert is missing.
+        await expect.poll(() => page.locator(".global-header").evaluate((node) => Boolean(node.closest('[aria-hidden="true"]')))).toBe(true);
+        await page.keyboard.press("Shift+Tab");
+        expect(await host.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+        await page.screenshot({ path: info.outputPath(`h5p-fullscreen-${closeWith}.png`) });
+        if (closeWith === "Escape") await page.keyboard.press("Escape");
+        else await exit.click();
+        await expect(host).not.toHaveAttribute("aria-modal", "true");
+        await expect(opener).toBeFocused();
+        await expect(answer).toHaveAttribute("aria-checked", "true");
+        expect(await player!.evaluate((node) => node === document.querySelector("h5p-player"))).toBe(true);
+        await expect.poll(() => page.locator(".global-header").evaluate((node) => Boolean(node.closest('[aria-hidden="true"]')))).toBe(false);
+        await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
+      }
+      await page.getByRole("button", { name: /Check|Die Antworten überprüfen/ }).click();
+      await expect(page.getByText("Gespeichert (1/1).")).toBeVisible();
+      await expect(page.locator(".h5p-multichoice")).toBeVisible();
+      const saved = await page.request.get(`${webBase}/api/learning/courses/${seeded.courseId}/tasks/${seeded.taskId}/submissions`);
+      expect(saved.ok()).toBe(true);
+      expect(await saved.json()).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: "h5p", score_raw: 1, score_max: 1 })
+      ]));
+      expect(errors).toEqual([]);
+    } finally { await learner.context.close(); await teacher.context.close(); }
+  });
+
+  test(`@feature-detail requests feedback for text after a reviewed image (${profile})`, async ({ browser }) => {
+    test.setTimeout(150_000);
+    const { teacher, learner } = await roles(browser, profile);
+    const page = learner.page;
+    const errors = trackErrors(page);
+    try {
+      const seeded = await seedLearnerNavigationCourse(teacher.page, page, `iPad-Antwortwechsel ${Date.now()}`);
+      const learnerSub = await currentUserSub(page);
+      await page.goto(`/learning/courses/${seeded.courseId}/units/${seeded.unitId}?module=${seeded.graphModuleId}`);
+      await page.getByRole("button", { name: "Aufgabe 1 beginnen" }).click();
+      await page.getByRole("radio", { name: "Datei hochladen", exact: true }).press("Space");
+      await page.getByLabel("Datei auswählen").setInputFiles({ name: "antwort.png", mimeType: "image/png",
+        buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==", "base64") });
+      await holdProviderWorker();
+      try {
+        await page.getByRole("button", { name: "Rückmeldung einholen", exact: true }).click();
+        await expect(page.locator(".learning-task-feedback-status:visible")).toContainText("Rückmeldung wird erstellt");
+        await completeQueuedFeedbackDeterministically({ ...seeded, learnerSub });
+        await expect(page.getByRole("button", { name: "Abgeben", exact: true })).toBeEnabled();
+        await page.getByRole("radio", { name: "Text schreiben", exact: true }).press("Space");
+        await page.locator('.learning-markdown-editor__surface [contenteditable="true"]').fill("Meine neue schriftliche Begründung.");
+        await page.getByRole("button", { name: "Neue Rückmeldung einholen", exact: true }).click();
+        await expect(page.locator(".learning-task-feedback-status:visible")).toContainText("Rückmeldung wird erstellt");
+        await completeQueuedFeedbackDeterministically({ ...seeded, learnerSub });
+        await expect(page.getByRole("button", { name: "Abgeben", exact: true })).toBeEnabled();
+      } finally { await releaseProviderWorker(); }
+      const response = await page.request.get(`${webBase}/api/learning/courses/${seeded.courseId}/tasks/${seeded.taskId}/submissions`);
+      expect(response.ok()).toBe(true);
+      const submissions = await response.json();
+      expect(submissions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: "image", analysis_status: "completed" }),
+        expect.objectContaining({ kind: "text", text_body: "Meine neue schriftliche Begründung.", analysis_status: "completed" })
+      ]));
+      expect(errors).toEqual([]);
+    } finally { await learner.context.close(); await teacher.context.close(); }
+  });
+
   test(`@feature-detail finalizes reviewed text exactly once (${profile})`, async ({ browser }) => {
     test.setTimeout(120_000);
     const { teacher, learner } = await roles(browser, profile);

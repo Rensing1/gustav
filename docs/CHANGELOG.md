@@ -1,6 +1,23 @@
 # Changelog
 
+## 2026-10-23
+
+### Kompatibilität und Rückmeldung im Lernraum
+
+- fix(h5p): Vollbild erhält die bestehende Player-Instanz auch ohne native Dialog-APIs. Fokus, Escape, Hintergrundschutz und Scrollzustand verwenden die gemeinsamen Helfer; die Gestaltung benötigt weder `:modal` noch `:has()`. Die Browseruntergrenze bleibt iPadOS 15.3.1.
+- fix(learning): Nach einer bewerteten Bildantwort kann eine neue Textantwort wieder zur Rückmeldung gesendet werden. Ungeprüfte Textänderungen lösen auch beim Wechsel des Antworttyps die bestehende Abgabewarnung aus; ältere Antworten bleiben erhalten.
+- test(browser): Die gezielte iOS-Kompatibilitätsspec ergänzt authentifizierte H5P-Vollbild- und Bild-zu-Text-Abläufe in modernen und eingeschränkten Browserprofilen. Eine Prüfung auf einem echten alten iPad bleibt zusätzlich erforderlich.
+- docs: Designregeln, Lernraum-/Abgabehandbuch und Browserreferenz an die Umsetzung angeglichen; veraltete Live-Miniaturfeld-Ausnahme ausdrücklich abgelöst. Keine Änderung an HTTP-API, Datenbankschema oder Berechtigungen durch diese Reparatur.
+
 ## 2026-10-22
+
+### Gemeinsame Navigation und Arbeitsansichten
+
+- design: Gemeinsame Navigation, Kontextleisten, Lernarbeitsbereiche und Live-Ansichten verwenden die überarbeitete Formensprache. Auf schmalen Ansichten stellt eine Phasenliste den modularen Lernpfad dar; Inhaltsnavigation und Aufgabenraum bleiben miteinander verbunden.
+- feat(h5p): H5P-Aufgaben bieten einen Vollbildmodus innerhalb der Browserfläche. Der Kompatibilitätsnachtrag vom 23. Oktober erhält dabei die Unterstützung alter iPads.
+- design(dialog): KI-Dialoge benennen den Übergang zur Abschlussaufgabe beziehungsweise Abgabe und zeigen Abschlussantwort, Rückmeldung und Verlauf in der gemeinsamen Ergebnisdarstellung.
+- fix(teaching/api): Das Löschen einer Aufgabe mit bestehenden Abgaben liefert den im OpenAPI-Vertrag dokumentierten Konflikt HTTP 409; die Lernhistorie bleibt erhalten.
+- test(design): Der [visuelle Abgleich](plan/2026-10-22-ui-gesamtpruefung-commits.md) dokumentiert die Prüfung und Aktualisierung der Referenzbilder.
 
 ### Sicherheitsupdates für Laufzeiten und Abhängigkeiten
 

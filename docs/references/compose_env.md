@@ -32,6 +32,8 @@ Der Keycloak-Service übergibt ausschließlich `KC_BOOTSTRAP_ADMIN_USERNAME` und
 
 Die bisherigen Namen bleiben für vorhandene `.env`-Dateien und Test-/Importwerkzeuge erhalten. Diese Werkzeuge lesen weiterhin `KEYCLOAK_ADMIN*`; abweichende Bootstrap-Werte ändern deren Anmeldedaten nicht. Der Keycloak-Service lädt `.env` nicht pauschal als Containerumgebung, sondern erhält nur seine ausdrücklich aufgeführten Einstellungen. Dadurch werden weder veraltete Admin-Variablen noch sachfremde Geheimnisse an Keycloak weitergereicht. Zusätzliche Keycloak-Einstellungen brauchen einen expliziten Compose-Eintrag.
 
+Das Login-Theme erhält `ORIGIN` ausdrücklich für die Links zur Wiederanmeldung (`/auth/login`) und Passwort-Hilfe (`/auth/forgot`). Bestehende nicht leere `ORIGIN`-Eingaben haben Vorrang. Fehlt `ORIGIN` oder ist es leer, verwendet Compose `WEB_BASE`; fehlt auch dieser Wert oder ist er leer, gilt `https://app.localhost`. Das Ziel stammt ausschließlich aus der vertrauenswürdigen Deployment-Konfiguration, nicht aus Anfrageparametern. Die Compose-Regression prüft Vorrang und Rückfälle mit synthetischen Adressen; der isolierte Keycloak-Smoke prüft beide tatsächlich gerenderten Links mit einer von localhost abweichenden Adresse.
+
 Bootstrap erzeugt einen temporären Admin ausschließlich beim erstmaligen Anlegen des Master-Realms. Bei einer bestehenden Datenbank bleiben vorhandene Admin-Konten und Passwörter gültig; andere Bootstrap-Werte erzeugen dort weder einen neuen Admin noch einen Passwortreset. Ein temporärer Bootstrap-Zugang ist nach Einrichtung eines dauerhaften, abgesicherten Admin-Zugangs zu entfernen. Siehe [Keycloak: Bootstrap-Semantik](https://www.keycloak.org/server/bootstrap-admin-recovery).
 
 ## Einzelknoten und Sticky Sessions

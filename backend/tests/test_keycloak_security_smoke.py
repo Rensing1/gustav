@@ -51,6 +51,23 @@ def test_compose_bootstrap_interpolation(tmp_path, values, username, password):
     assert 'KEYCLOAK_ADMIN_PASSWORD' not in environment
 
 
+@pytest.mark.parametrize('values,origin', [
+    ({}, 'https://app.localhost'),
+    ({'WEB_BASE': 'https://school.example'}, 'https://school.example'),
+    ({'ORIGIN': 'https://legacy.example'}, 'https://legacy.example'),
+    ({'ORIGIN': 'https://legacy.example', 'WEB_BASE': 'https://school.example'}, 'https://legacy.example'),
+    ({'ORIGIN': '', 'WEB_BASE': 'https://school.example'}, 'https://school.example'),
+    ({'ORIGIN': '', 'WEB_BASE': ''}, 'https://app.localhost'),
+])
+def test_compose_preserves_the_theme_recovery_origin(tmp_path, values, origin):
+    """Keep existing recovery origins while excluding unrelated app secrets."""
+    environment = compose_keycloak_environment(tmp_path, {
+        **values, 'APP_CSRF_TOKEN_SECRET': 'synthetic-unrelated-secret',
+    })
+    assert environment['ORIGIN'] == origin
+    assert 'APP_CSRF_TOKEN_SECRET' not in environment
+
+
 def docker(*args, check=True):
     return subprocess.run(['docker', *args], cwd=ROOT, text=True, capture_output=True, check=check)
 
@@ -85,6 +102,7 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
     base = f'http://127.0.0.1:{port}'
+    app_origin = 'https://school.example'
 
     def start(image, *, old=False, bootstrap_username='synthetic-admin', bootstrap_password=None):
         bootstrap_password = bootstrap_password or password
@@ -93,10 +111,12 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         else:
             environment = compose_keycloak_environment(tmp_path, {
                 'KC_BOOTSTRAP_ADMIN_USERNAME': bootstrap_username, 'KC_BOOTSTRAP_ADMIN_PASSWORD': bootstrap_password,
+                'ORIGIN': app_origin,
             })
             bootstrap_env = {key: environment[key] for key in (
                 'KC_BOOTSTRAP_ADMIN_USERNAME', 'KC_BOOTSTRAP_ADMIN_PASSWORD',
                 'KC_SPI_STICKY_SESSION_ENCODER__INFINISPAN__SHOULD_ATTACH_ROUTE',
+                'ORIGIN',
             )}
         env_args = [arg for key, value in bootstrap_env.items() for arg in ('-e', f'{key}={value}')]
         docker('run', '-d', '--name', identity, '--network', network, '-p', f'127.0.0.1:{port}:8080',
@@ -140,7 +160,8 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         docker('exec', identity, 'test', '-f', f'/opt/keycloak/providers/keycloak-bcrypt-{provider_version}.jar')
 
     def setup_realm():
-        realm = {'realm':'security-test','enabled':True, 'passwordPolicy':'hashAlgorithm(bcrypt) and hashIterations(12)', 'clients':[{
+        realm = {'realm':'security-test','enabled':True, 'loginTheme':'gustav',
+                 'passwordPolicy':'hashAlgorithm(bcrypt) and hashIterations(12)', 'clients':[{
             'clientId':'security-client','publicClient':True,'directAccessGrantsEnabled':True,
         }], 'users':[{'username':'student','enabled':True,'emailVerified':True,
             'firstName':'Synthetic','lastName':'Student','email':'student@example.com',
@@ -203,6 +224,14 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
             assert admin_login('synthetic-admin', replacement_password).status_code == 400
             assert admin_login('replacement-admin', replacement_password).status_code == 400
             verify()
+        # Render the real theme without visiting the synthetic external app origin.
+        recovery = requests.get(base+'/realms/security-test/login-actions/action-token', params={
+            'key':'invalid', 'pageRedirectUri':'https://untrusted.example/',
+        }, timeout=10)
+        assert recovery.status_code == 400
+        assert f'href="{app_origin}/auth/login"' in recovery.text
+        assert f'href="{app_origin}/auth/forgot"' in recovery.text
+        assert 'href="https://untrusted.example' not in recovery.text
     finally:
         docker('rm','-f',identity,database,check=False)
         docker('network','rm',network,check=False)

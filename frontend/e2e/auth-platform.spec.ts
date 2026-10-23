@@ -1,8 +1,10 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./support/feature-test";
 import { ensureLearnerUser } from "./support/keycloak";
-import { e2eEmail, e2ePassword } from "./support/e2e-env";
+import { e2eEmail, e2ePassword, kcBase, realm, webBase } from "./support/e2e-env";
 import { login } from "./support/auth";
+
+test.use({ locale: "de-DE" });
 
 async function standardLoginJourney(page: Page) {
   const email = e2eEmail("auth.platform");
@@ -34,7 +36,32 @@ async function bcryptLoginJourney(page: Page) {
   expect((await page.request.get('/api/me')).status()).toBe(200);
 }
 
-test("@feature-acceptance Keycloak preserves standard and imported BCrypt logins", async ({ page }) => {
+async function recoveryJourney(page: Page) {
+  const errorUrl = `${kcBase}/realms/${realm}/login-actions/action-token?key=invalid&pageRedirectUri=https://untrusted.example/`;
+  const response = await page.goto(errorUrl);
+  expect(response?.status()).toBe(400);
+  const recovery = page.getByRole('link', { name: 'Erneut anmelden', exact: true });
+  const passwordHelp = page.locator(`a[href="${webBase}/auth/forgot"]`);
+  await expect(recovery).toHaveAttribute('href', `${webBase}/auth/login`);
+  await expect(passwordHelp).toBeVisible();
+  await expect(page.locator('a[href^="https://untrusted.example"]')).toHaveCount(0);
+
+  // Open password help without sending mail or changing the realm SMTP settings.
+  await passwordHelp.click();
+  await expect(page.locator('input[name="username"]')).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${kcBase}/realms/${realm}/protocol/openid-connect/forgot-credentials`));
+
+  await page.goto(errorUrl);
+  await recovery.click();
+  await page.locator('input[name="username"]').fill(e2eEmail('auth.platform'));
+  await page.locator('input[name="password"]').fill(e2ePassword);
+  await page.locator('button[type="submit"], input[type="submit"]').first().click();
+  await expect.poll(async () => (await page.request.get('/api/me')).status()).toBe(200);
+  await page.goto('/learning');
+  await expect(page).toHaveURL(/\/learning/);
+}
+
+test("@feature-acceptance Keycloak preserves standard and imported BCrypt logins and recovery links", async ({ page }) => {
   test.setTimeout(150_000);
   await test.step("Sichere Darstellung eines ungültigen Rücksprungs", async () => {
     await page.goto('/auth/callback?code=invalid');
@@ -43,6 +70,8 @@ test("@feature-acceptance Keycloak preserves standard and imported BCrypt logins
     await expect(page.getByText('invalid', { exact: true })).toHaveCount(0);
   });
   await test.step("Normale Anmeldung", () => standardLoginJourney(page));
+  await page.context().clearCookies();
+  await test.step("Wiederanmeldung und Passwort-Hilfe über sichere Recovery-Links", () => recoveryJourney(page));
   await page.context().clearCookies();
   await test.step("Übernommenes BCrypt-Passwort", () => bcryptLoginJourney(page));
 });

@@ -274,6 +274,8 @@ services:
       KC_PROXY_HEADERS: xforwarded
       KC_HOSTNAME: ${KC_PUBLIC_BASE_URL:-https://id.localhost}
       KC_HOSTNAME_ADMIN: ${KC_PUBLIC_BASE_URL:-https://id.localhost}
+      # The login theme needs the trusted app origin for recovery links.
+      ORIGIN: ${ORIGIN:-${WEB_BASE:-https://app.localhost}}
       # Email sender configuration (Quarkus-based) for verification + reset mails
       KC_SPI_EMAIL_SENDER_DEFAULT_HOST: ${KC_SMTP_HOST:-}
       KC_SPI_EMAIL_SENDER_DEFAULT_PORT: ${KC_SMTP_PORT:-587}

@@ -634,7 +634,15 @@ def test_keycloak_theme_copies_shared_auth_stylesheet():
     assert css.exists(), "Expected shared auth stylesheet for Keycloak theme"
     dockerfile = Path("keycloak/Dockerfile").read_text(encoding="utf-8")
     for name in ["auth-theme.css", "theme-tokens.css"]:
-        assert f"COPY frontend/src/lib/styles/{name} /opt/keycloak/themes/gustav/login/resources/css/{name}" in dockerfile
+        # COPY options may set ownership/modes without changing the shared source.
+        assert any(
+            line.startswith("COPY ")
+            and line.split()[-2:] == [
+                f"frontend/src/lib/styles/{name}",
+                f"/opt/keycloak/themes/gustav/login/resources/css/{name}",
+            ]
+            for line in dockerfile.splitlines()
+        )
     assert not (THEME_ROOT / "resources/css/auth-theme.css").exists(), "Do not maintain a second token source"
 
 

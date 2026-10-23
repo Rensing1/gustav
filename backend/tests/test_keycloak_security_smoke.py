@@ -2,10 +2,13 @@
 import json
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import time
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 from uuid import uuid4
 
 import pytest
@@ -73,18 +76,53 @@ def docker(*args, check=True):
 
 
 @pytest.fixture(scope='module')
-def images():
+def images(tmp_path_factory):
     suffix = uuid4().hex[:12]
     current = f'gustav-security-keycloak:{suffix}'
     previous = f'gustav-security-keycloak-old:{suffix}'
     # Frozen public baseline: also works in shallow CI checkouts after this PR merges.
     old_file = ROOT / 'backend/tests/fixtures/keycloak/26.7.3.Dockerfile'
+    # Git does not record ordinary read bits: reproduce a restrictive deployment checkout.
+    context = tmp_path_factory.mktemp('keycloak-restrictive-checkout')
+    shutil.copytree(ROOT / 'keycloak', context / 'keycloak')
+    shutil.copytree(ROOT / 'frontend/src/lib/styles', context / 'frontend/src/lib/styles')
+    for name in ('package.json', 'package-lock.json'):
+        shutil.copy2(ROOT / 'frontend' / name, context / 'frontend' / name)
+    for name in ('register.ftl', 'logout-confirm.ftl'):
+        (context / 'keycloak/themes/gustav/login' / name).chmod(0o600)
+    for name in ('auth-theme.css', 'theme-tokens.css'):
+        (context / 'frontend/src/lib/styles' / name).chmod(0o600)
+    # The upgrade starts from a working old image, regardless of this checkout's modes.
+    baseline = tmp_path_factory.mktemp('keycloak-readable-baseline')
+    shutil.copytree(context, baseline, dirs_exist_ok=True)
+    shutil.copyfile(old_file, baseline / 'keycloak/Dockerfile')
+    for path in baseline.rglob('*'):
+        path.chmod(0o755 if path.is_dir() else 0o644)
     try:
-        docker('build', '-f', 'keycloak/Dockerfile', '-t', current, '.')
-        docker('build', '-f', str(old_file), '-t', previous, '.')
+        docker('build', '-f', str(context / 'keycloak/Dockerfile'), '-t', current, str(context))
+        docker('build', '-f', str(baseline / 'keycloak/Dockerfile'), '-t', previous, str(baseline))
         yield previous, current
     finally:
         docker('image', 'rm', current, previous, check=False)
+
+
+def test_all_theme_files_are_readable_by_the_keycloak_runtime_user(images):
+    """Check the actual image as UID 1000/GID 0, including nested CSS and fonts."""
+    result = docker('run', '--rm', '--user', '1000:0', '--entrypoint', '/bin/bash', images[1], '-ec', '''
+        test "$UID" = 1000
+        shopt -s globstar dotglob nullglob
+        paths=(/opt/keycloak/themes/gustav/**)
+        test "${#paths[@]}" -gt 0
+        failed=0
+        for path in "${paths[@]}"; do
+            if ! test -r "$path" || { test -d "$path" && ! test -x "$path"; }; then
+                echo "Unreadable theme path: $path" >&2
+                failed=1
+            fi
+        done
+        exit "$failed"
+    ''', check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize('upgrade', [False, True], ids=['empty-postgres', 'schema-upgrade'])
@@ -101,8 +139,18 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
-    base = f'http://127.0.0.1:{port}'
+    base = f'https://127.0.0.1:{port}'
     app_origin = 'https://school.example'
+    certificate, private_key = tmp_path / 'tls.crt', tmp_path / 'tls.key'
+    subprocess.run([
+        'openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+        '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1',
+        '-keyout', str(private_key), '-out', str(certificate),
+    ], capture_output=True, check=True)
+    # This short-lived synthetic key is mounted read-only for Keycloak's non-root user.
+    private_key.chmod(0o644)
+    client = requests.Session()
+    client.verify = str(certificate)
 
     def start(image, *, old=False, bootstrap_username='synthetic-admin', bootstrap_password=None):
         bootstrap_password = bootstrap_password or password
@@ -111,22 +159,24 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         else:
             environment = compose_keycloak_environment(tmp_path, {
                 'KC_BOOTSTRAP_ADMIN_USERNAME': bootstrap_username, 'KC_BOOTSTRAP_ADMIN_PASSWORD': bootstrap_password,
-                'ORIGIN': app_origin,
+                'ORIGIN': app_origin, 'KC_PUBLIC_BASE_URL': base,
+                'KC_DB_USERNAME': 'keycloak', 'KC_DB_PASSWORD': password,
             })
-            bootstrap_env = {key: environment[key] for key in (
-                'KC_BOOTSTRAP_ADMIN_USERNAME', 'KC_BOOTSTRAP_ADMIN_PASSWORD',
-                'KC_SPI_STICKY_SESSION_ENCODER__INFINISPAN__SHOULD_ATTACH_ROUTE',
-                'ORIGIN',
-            )}
+            # Exercise every explicit runtime setting; only the isolated DB host differs.
+            bootstrap_env = {**environment, 'KC_DB_URL': f'jdbc:postgresql://{database}:5432/keycloak'}
         env_args = [arg for key, value in bootstrap_env.items() for arg in ('-e', f'{key}={value}')]
-        docker('run', '-d', '--name', identity, '--network', network, '-p', f'127.0.0.1:{port}:8080',
+        docker('run', '-d', '--name', identity, '--network', network, '-p', f'127.0.0.1:{port}:8443',
+               '-v', f'{certificate}:/opt/keycloak/conf/tls.crt:ro',
+               '-v', f'{private_key}:/opt/keycloak/conf/tls.key:ro',
                *env_args,
-               image, 'start', '--optimized', '--http-enabled=true', f'--hostname={base}',
+               image, 'start', '--optimized', '--import-realm', f'--hostname={base}',
+               '--https-certificate-file=/opt/keycloak/conf/tls.crt',
+               '--https-certificate-key-file=/opt/keycloak/conf/tls.key',
                f'--db-url=jdbc:postgresql://{database}:5432/keycloak', '--db-username=keycloak', f'--db-password={password}')
         deadline = time.monotonic()+180
         while time.monotonic() < deadline:
             try:
-                if requests.get(base+'/realms/master/.well-known/openid-configuration',timeout=2).status_code == 200:
+                if client.get(base+'/realms/master/.well-known/openid-configuration',timeout=2).status_code == 200:
                     if not old:
                         logs = docker('logs', identity)
                         assert 'The option `shouldAttachRoute` is deprecated' not in logs.stdout + logs.stderr
@@ -139,7 +189,7 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         pytest.fail('Keycloak did not become ready: '+docker('logs',identity,check=False).stdout[-6000:])
 
     def admin_login(username='synthetic-admin', supplied=None):
-        return requests.post(base+'/realms/master/protocol/openid-connect/token', data={
+        return client.post(base+'/realms/master/protocol/openid-connect/token', data={
             'grant_type':'password', 'client_id':'admin-cli', 'username':username, 'password':supplied or password,
         },timeout=10)
 
@@ -149,7 +199,7 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         return {'Authorization':'Bearer '+response.json()['access_token']}
 
     def verify_internal_spi(version):
-        response = requests.get(base+'/admin/serverinfo', headers=admin_headers(), timeout=10)
+        response = client.get(base+'/admin/serverinfo', headers=admin_headers(), timeout=10)
         response.raise_for_status()
         info = response.json()
         assert info['systemInfo']['version'] == version
@@ -167,21 +217,21 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
             'firstName':'Synthetic','lastName':'Student','email':'student@example.com',
             'credentials':[{'type':'password','algorithm':'bcrypt','hashIterations':-1,
                             'hashedSaltedValue':BCRYPT_HASH,'temporary':False}]}]}
-        created = requests.post(base+'/admin/realms', json=realm,
+        created = client.post(base+'/admin/realms', json=realm,
                                 headers=admin_headers(),timeout=10)
         assert created.status_code == 201, created.status_code
 
     def verify():
-        discovery = requests.get(base+'/realms/security-test/.well-known/openid-configuration',timeout=10)
+        discovery = client.get(base+'/realms/security-test/.well-known/openid-configuration',timeout=10)
         assert discovery.status_code == 200
         configuration = discovery.json()
         assert configuration['issuer'] == base+'/realms/security-test'
         assert configuration['jwks_uri'].startswith(base+'/')
-        jwks = requests.get(configuration['jwks_uri'], timeout=10)
+        jwks = client.get(configuration['jwks_uri'], timeout=10)
         assert jwks.status_code == 200
         assert jwks.json()['keys']
         for supplied, expected in [('incorrect-synthetic-password',400), (PASSWORD,200), ('incorrect-synthetic-password',400)]:
-            response = requests.post(configuration['token_endpoint'],data={
+            response = client.post(configuration['token_endpoint'],data={
                 'grant_type':'password','client_id':'security-client','username':'student','password':supplied,
             },timeout=10)
             assert response.status_code == expected, response.status_code
@@ -190,15 +240,52 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
             else:
                 assert response.json().get('error') == 'invalid_grant'
         headers = admin_headers()
-        users = requests.get(base+'/admin/realms/security-test/users', params={'username':'student', 'exact':'true'},
+        users = client.get(base+'/admin/realms/security-test/users', params={'username':'student', 'exact':'true'},
                              headers=headers, timeout=10)
         users.raise_for_status()
         user_id = users.json()[0]['id']
-        credentials = requests.get(base+f'/admin/realms/security-test/users/{user_id}/credentials', headers=headers, timeout=10)
+        credentials = client.get(base+f'/admin/realms/security-test/users/{user_id}/credentials', headers=headers, timeout=10)
         credentials.raise_for_status()
         password_credentials = [entry for entry in credentials.json() if entry['type'] == 'password']
         assert len(password_credentials) == 1
         assert json.loads(password_credentials[0]['credentialData'])['algorithm'] == 'bcrypt'
+
+    def verify_registration(version):
+        """Follow the imported realm's own registration link without submitting mail."""
+        class Links(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.registration = []
+
+            def handle_starttag(self, tag, attrs):
+                href = dict(attrs).get('href', '')
+                if tag == 'a' and urlsplit(href).path == '/realms/gustav/login-actions/registration':
+                    self.registration.append(href)
+
+        with requests.Session() as browser:
+            browser.verify = str(certificate)
+            login = browser.get(base+'/realms/gustav/protocol/openid-connect/auth', params={
+                'client_id': 'gustav-web', 'response_type': 'code', 'scope': 'openid',
+                'redirect_uri': 'https://app.localhost/auth/callback', 'state': 'synthetic-state',
+                'nonce': 'synthetic-nonce', 'code_challenge_method': 'S256',
+                'code_challenge': 'a'*43,
+            }, timeout=10)
+            assert login.status_code == 200
+            links = Links()
+            links.feed(login.text)
+            assert len(links.registration) == 1
+            registration_url = urljoin(login.url, links.registration[0])
+            assert urlsplit(registration_url).netloc == urlsplit(base).netloc
+            registration = browser.get(registration_url, timeout=10)
+        logs = docker('logs', identity)
+        diagnostics = (logs.stdout + logs.stderr).replace(password, '[synthetic-secret]')
+        (tmp_path / f'keycloak-registration-{version}.log').write_text(diagnostics)
+        assert registration.status_code == 200, diagnostics
+        assert '<title>Registrieren - GUSTAV</title>' in registration.text
+        for field in ('kc-register-form', 'display_name', 'email', 'password', 'password-confirm'):
+            assert f'id="{field}"' in registration.text
+        for error in ('Failed to process template', 'FreeMarkerException', 'MediaType not set', 'Uncaught server error', 'HTTP 500'):
+            assert error not in diagnostics, diagnostics
 
     try:
         docker('network','create',network)
@@ -215,6 +302,7 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         verify_internal_spi('26.7.3' if upgrade else '26.8.1')
         setup_realm()
         verify()
+        verify_registration('26.7.3' if upgrade else '26.8.1')
         if upgrade:
             docker('rm','-f',identity)
             # Bootstrap values must neither reset nor create admins in an existing master realm.
@@ -224,8 +312,9 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
             assert admin_login('synthetic-admin', replacement_password).status_code == 400
             assert admin_login('replacement-admin', replacement_password).status_code == 400
             verify()
+            verify_registration('26.8.1')
         # Render the real theme without visiting the synthetic external app origin.
-        recovery = requests.get(base+'/realms/security-test/login-actions/action-token', params={
+        recovery = client.get(base+'/realms/security-test/login-actions/action-token', params={
             'key':'invalid', 'pageRedirectUri':'https://untrusted.example/',
         }, timeout=10)
         assert recovery.status_code == 400
@@ -233,5 +322,6 @@ def test_discovery_bcrypt_and_schema_compatibility(images, upgrade, tmp_path):
         assert f'href="{app_origin}/auth/forgot"' in recovery.text
         assert 'href="https://untrusted.example' not in recovery.text
     finally:
+        client.close()
         docker('rm','-f',identity,database,check=False)
         docker('network','rm',network,check=False)

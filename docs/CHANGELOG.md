@@ -2,6 +2,8 @@
 
 ## 2026-10-23
 
+- fix(keycloak): Theme-Dateien, gemeinsame Styles und Fonts erhalten beim Imagebau explizite lesbare Rechte; restriktive Checkout-Modi können Registrierung und Logout nicht mehr durch unlesbare Templates blockieren. Ein Imagevertrag prüft sämtliche Theme-Pfade als UID 1000/GID 0. Neuinstallations-/Upgrade-Smokes importieren den echten GUSTAV-Realm aus einem absichtlich restriktiven Build-Kontext und öffnen die Registrierung über den dynamischen Login-Link; der lokale authentifizierte Browser-Rundlauf prüft dasselbe Formular ohne Mailversand.
+
 - fix(keycloak): `ORIGIN` wird für die Wiederanmelde- und Passwort-Hilfe-Links ausdrücklich übergeben. Bestehende Eingaben haben Vorrang vor `WEB_BASE` und dem bisherigen localhost-Standard; Compose-Regressionen und gerenderte Fehlerseiten sichern eigene Anwendungsadressen ab.
 
 - fix(keycloak): Moderne Bootstrap-Admin-Variablen mit kompatiblen bisherigen ENV-Eingaben; unnötigen Sticky-Session-Routenanhang im Einzelknotenbetrieb deaktiviert. Isolierte Neuinstallations-/Upgrade-Smokes prüfen bestehende Admin-Zugänge, OIDC und bcrypt einschließlich der verbleibenden internen SPI-Abhängigkeit. Das Major-Upgrade-Risiko ist in der [Konfigurationsreferenz](references/compose_env.md) dokumentiert.

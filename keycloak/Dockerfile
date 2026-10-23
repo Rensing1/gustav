@@ -29,15 +29,17 @@ ARG KEYCLOAK_BCRYPT_VERSION=1.7.0
 
 # Copy the custom GUSTAV login theme into the Keycloak image
 # This makes deployments reproducible without runtime volumes.
-COPY keycloak/themes/gustav /opt/keycloak/themes/gustav
+# Ignore checkout read bits: directories need traversal, files need runtime reads.
+# Keep root ownership so the non-root server cannot rewrite theme resources.
+COPY --chown=0:0 --chmod=u=rwX,go=rX keycloak/themes/gustav /opt/keycloak/themes/gustav
 
 # Copy the shared auth stylesheet into the theme so Svelte entry pages and
 # Keycloak-hosted flows speak the same visual language without runtime mounts.
-COPY frontend/src/lib/styles/auth-theme.css /opt/keycloak/themes/gustav/login/resources/css/auth-theme.css
-COPY frontend/src/lib/styles/theme-tokens.css /opt/keycloak/themes/gustav/login/resources/css/theme-tokens.css
+COPY --chown=0:0 --chmod=0644 frontend/src/lib/styles/auth-theme.css /opt/keycloak/themes/gustav/login/resources/css/auth-theme.css
+COPY --chown=0:0 --chmod=0644 frontend/src/lib/styles/theme-tokens.css /opt/keycloak/themes/gustav/login/resources/css/theme-tokens.css
 # Reuse the locked font packages including their licences; no cross-origin font requests.
-COPY --from=auth-fonts /fonts/node_modules/@fontsource/inter /opt/keycloak/themes/gustav/login/resources/fonts/inter
-COPY --from=auth-fonts /fonts/node_modules/@fontsource/space-grotesk /opt/keycloak/themes/gustav/login/resources/fonts/space-grotesk
+COPY --from=auth-fonts --chown=0:0 --chmod=u=rwX,go=rX /fonts/node_modules/@fontsource/inter /opt/keycloak/themes/gustav/login/resources/fonts/inter
+COPY --from=auth-fonts --chown=0:0 --chmod=u=rwX,go=rX /fonts/node_modules/@fontsource/space-grotesk /opt/keycloak/themes/gustav/login/resources/fonts/space-grotesk
 
 # Install bcrypt password hash provider so imported Supabase hashes remain valid.
 # Source: https://github.com/leroyguillaume/keycloak-bcrypt (Apache-2.0)

@@ -1,6 +1,35 @@
 import { describe, expect, it } from "vitest";
 
-import { highlightedLearnerGraphModuleIds, learnerGraphNodeIsSelected } from "./graph-selection";
+import { highlightedLearnerGraphModuleIds, learnerGraphNodeIsSelected, learnerGraphFocusId } from "./graph-selection";
+
+describe("learnerGraphFocusId", () => {
+  const phase = { id: "empty-phase", type: "phaseBand", data: {} };
+  const locked = { id: "locked", type: "unitNode", data: { status: "locked" as const } };
+  const open = { id: "open", type: "unitNode", data: { status: "open" as const } };
+  const selected = { ...open, id: "selected", selected: true };
+
+  it("prefers a selected module on every screen", () => {
+    for (const compact of [true, false]) {
+      expect(learnerGraphFocusId([phase, locked, open, selected], compact)).toBe("selected");
+    }
+  });
+
+  it("starts at the first open module on narrow screens, skipping empty phases", () => {
+    expect(learnerGraphFocusId([phase, locked, open, { ...open, id: "later" }], true)).toBe("open");
+  });
+
+  it("keeps graph order when no module is open", () => {
+    const done = { ...locked, id: "done", data: { status: "done" as const } };
+    expect(learnerGraphFocusId([phase, locked, done], true)).toBe("locked");
+    expect(learnerGraphFocusId([phase, done, locked], true)).toBe("done");
+  });
+
+  it("uses the first phase on desktop or when there are no modules", () => {
+    expect(learnerGraphFocusId([phase, locked, open], false)).toBe(phase.id);
+    expect(learnerGraphFocusId([phase], true)).toBe(phase.id);
+    expect(learnerGraphFocusId([], true)).toBeNull();
+  });
+});
 
 describe("highlightedLearnerGraphModuleIds", () => {
   it("keeps all open modules highlighted", () => {

@@ -49,10 +49,11 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
   await ensureTeacherUser(teacherEmail, e2ePassword);
   await ensureLearnerUser(learnerEmail, e2ePassword);
   const teacherContext = await newBrowserContext(browser);
-  const learnerContext = await newBrowserContext(browser);
+  const learnerContext = await newBrowserContext(browser, { hasTouch: true });
   try {
     const teacher = await teacherContext.newPage();
     const learner = await learnerContext.newPage();
+    const touch = await learnerContext.newCDPSession(learner);
     await login(teacher, teacherEmail, e2ePassword);
     await login(learner, learnerEmail, e2ePassword);
     const unit = await create(teacher, "/api/teaching/units", { title: `Graphvergleich ${Date.now()}`, unit_type: "modular" });
@@ -63,7 +64,7 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     phases.push(await create(teacher, `${base}/phases`, { title: "Transfer" }));
     phases.push(await create(teacher, `${base}/phases`, { title: "Ausblick" }));
     const modules = [];
-    for (const [index, title] of ["Start", "Beobachten", "Vergleichen", "Zusammenführen", "Transfer", "Üben"].entries()) {
+    for (const [index, title] of ["Start", "Beobachten", "Vergleichen – digitale Systeme und ihre miteinander verbundenen Bausteine", "Zusammenführen", "Transfer", "Üben"].entries()) {
       modules.push(await create(teacher, `${base}/modules`, {
         title, phase_id: phases[index < 4 ? 0 : 1].id, module_kind: index === 5 ? "practice" : "learning"
       }));
@@ -95,11 +96,14 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     const teacherUrl = `/teaching/units/${unit.id}?phase=${phases[0].id}`;
     const learnerUrl = `/learning/courses/${course.id}/units/${unit.id}`;
     await teacher.goto(teacherUrl);
+    await learner.setViewportSize({ width: 390, height: 844 });
     await learner.goto(learnerUrl);
     await expect(teacher.locator(".svelte-flow__node")).toHaveCount(9);
     await expect(learner.locator(".svelte-flow__node")).toHaveCount(9);
     await expect.poll(async () => (await geometry(learner)).edges.length).toBe(7);
     await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+    const startModule = learner.getByRole("button", { name: /Modul 01 Start/ });
+    await expect(startModule).toBeInViewport({ ratio: 0.999 });
     for (const page of [teacher, learner]) {
       await expect.poll(() => page.locator(".svelte-flow__viewport").evaluate((element) =>
         new DOMMatrix(getComputedStyle(element).transform).a
@@ -122,27 +126,17 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     for (const [label, viewport] of [
       ["desktop", { width: 1440, height: 900 }],
       ["tablet", { width: 1024, height: 768 }],
+      ["portrait", { width: 768, height: 1024 }],
       ["mobile", { width: 390, height: 844 }],
       ["narrow", { width: 320, height: 844 }]
     ] as const) {
       for (const theme of ["light", "dark"]) {
         for (const [role, page] of [["teacher", teacher], ["learner", learner]] as const) {
           await page.setViewportSize(viewport);
+          // Keep the learner's touch profile explicit across cross-role browser captures.
+          if (role === "learner") await touch.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
           await setAppTheme(page, theme);
           await page.evaluate(() => window.scrollTo(0, 0));
-          if (role === "learner" && viewport.width <= 1024) {
-            const path = page.getByRole("navigation", { name: "Lernpfad nach Phasen" });
-            await expect(path).toBeVisible();
-            await expect(path.locator(".mobile-learning-path__module")).toHaveCount(6);
-            const locked = path.locator(`#mobile-path-${modules[3].id}`);
-            await expect(locked).toContainText("Gesperrt");
-            await expect(locked.getByRole("button")).toHaveCount(0);
-            await expect(locked.getByRole("link", { name: "Beobachten", exact: true })).toBeVisible();
-            await expectDesignContrast(path.locator("h2, h3, .mobile-learning-path__status"));
-            await expectNoViewportOverflow(page);
-            await path.screenshot({ path: testInfo.outputPath(`${role}-${label}-${theme}-path.png`), animations: "disabled" });
-            continue;
-          }
           await expect(page.getByRole("button", { name: "Vergrößern", exact: true })).toBeVisible();
           await expect(page.getByRole("button", { name: "Verkleinern", exact: true })).toBeVisible();
           const controls = page.locator(".svelte-flow__controls");
@@ -154,10 +148,17 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
             const box = node.getBoundingClientRect();
             return box.bottom <= innerHeight ? null : JSON.stringify({ bottom: box.bottom, viewport: innerHeight, top: shell.getBoundingClientRect().top, height: shell.getBoundingClientRect().height, available: getComputedStyle(shell).getPropertyValue("--graph-available-height") });
           }), { message: `${role} ${label} controls remain on screen` }).toBeNull();
+          if (role === "learner") {
+            const attribution = (await page.locator(".svelte-flow__attribution").boundingBox())!;
+            const tools = (await controls.boundingBox())!;
+            expect(attribution.x + attribution.width <= tools.x || tools.x + tools.width <= attribution.x
+              || attribution.y + attribution.height <= tools.y || tools.y + tools.height <= attribution.y,
+            "Graph attribution must not sit behind the controls").toBe(true);
+          }
           for (const button of await controls.getByRole("button").all()) {
-            if (viewport.width <= 640) {
+            if (viewport.width <= 640 || role === "learner") {
               const box = (await button.boundingBox())!;
-              expect(box.width).toBeGreaterThanOrEqual(44);
+              expect(box.width, `${role} ${label} ${theme} touch target`).toBeGreaterThanOrEqual(44);
               expect(box.height).toBeGreaterThanOrEqual(44);
             }
             if (await button.isDisabled()) continue;
@@ -172,6 +173,9 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
           await expectDesignContrast(page.locator(".teacher-flow-unit-node--learner-locked strong, .teacher-flow-unit-node--learner-locked small"), true);
           await page.getByRole("button", { name: "Auswahl fokussieren", exact: true }).last().click();
           await expect.poll(() => page.locator(".svelte-flow__viewport").evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a)).toBeGreaterThanOrEqual(0.819);
+          if (role === "learner" && viewport.width <= 1024) {
+            await expect(startModule).toBeInViewport({ ratio: 0.999 });
+          }
           await page.locator(".teacher-flow-shell").screenshot({ path: testInfo.outputPath(`${role}-${label}-${theme}-focus.png`), animations: "disabled" });
           await expect(page.getByRole("button", { name: "Gesamtansicht", exact: true })).toBeVisible();
           await page.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
@@ -189,10 +193,10 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
           await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
           await page.screenshot({ path: testInfo.outputPath(`${role}-${label}-${theme}.png`), fullPage: true, animations: "disabled" });
         }
-        if (viewport.width > 1024) await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+        await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
       }
     }
-    // The learner phase list replaces the graph below the desktop breakpoint.
+    // Both roles keep the graph mounted across responsive breakpoints.
     for (const page of [teacher, learner]) await page.setViewportSize({ width: 1440, height: 900 });
     await expect(learner.locator(".svelte-flow__node")).toHaveCount(9);
     await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
@@ -205,7 +209,48 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
         return getComputedStyle(element).transform === before;
       })).toBe(true);
     }
+    await learner.setViewportSize({ width: 390, height: 844 });
+    await learner.getByRole("button", { name: "Auswahl fokussieren", exact: true }).click();
+    await expect(startModule).toBeInViewport({ ratio: 0.999 });
+    await expect.poll(() => learner.locator(".svelte-flow__viewport").evaluate(async (element) => {
+      const before = getComputedStyle(element).transform;
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return getComputedStyle(element).transform === before;
+    })).toBe(true);
+    // Native touch input exercises the existing pan/pinch implementation on Chromium.
+    await touch.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
+    const canvas = (await learner.locator(".svelte-flow").boundingBox())!;
+    const x = Math.round(canvas.x + canvas.width / 2), y = Math.round(canvas.y + 80);
+    const beforePan = await camera(learner);
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y, id: 0 }] });
+    for (let step = 1; step <= 5; step++) {
+      await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + step * 8, y, id: 0 }] });
+    }
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect.poll(async () => (await camera(learner))[1]).toBeGreaterThan(beforePan[1] + 20);
+    const beforePinch = await camera(learner);
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x - 30, y, id: 0 }, { x: x + 30, y, id: 1 }] });
+    for (let step = 1; step <= 5; step++) {
+      const spread = 30 + step * 4;
+      await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x - spread, y, id: 0 }, { x: x + spread, y, id: 1 }] });
+    }
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect.poll(async () => (await camera(learner))[0]).toBeGreaterThan(beforePinch[0]);
+    await touch.detach();
+    await learner.getByRole("button", { name: "Auswahl fokussieren", exact: true }).click();
+    await expect(startModule).toBeInViewport({ ratio: 0.999 });
+    await expect.poll(() => learner.locator(".svelte-flow__viewport").evaluate(async (element) => {
+      const before = getComputedStyle(element).transform;
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return getComputedStyle(element).transform === before;
+    })).toBe(true);
+    const focusedZoom = (await camera(learner))[0];
+    await learner.getByRole("button", { name: "Verkleinern", exact: true }).tap();
+    await expect.poll(async () => (await camera(learner))[0]).toBeLessThan(focusedZoom);
     const teacherCamera = await camera(teacher), learnerCamera = await camera(learner);
+    // A width change without an orientation change must preserve the user's camera.
+    await learner.setViewportSize({ width: 400, height: 844 });
+    await expect.poll(() => camera(learner)).toEqual(learnerCamera);
     await teacher.reload();
     await learner.reload();
     await expect(teacher.locator(".svelte-flow__node")).toHaveCount(9);
@@ -213,7 +258,7 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
     await expect.poll(() => camera(teacher)).toEqual(teacherCamera);
     await expect.poll(() => camera(learner)).toEqual(learnerCamera);
-    await learner.getByRole("button", { name: /Modul 01 Start/ }).click();
+    await startModule.tap();
     await expect(learner).toHaveURL(new RegExp(`module=${modules[0].id}`));
     await expect(learner.getByRole("button", { name: "Aufgabe 1 beginnen" })).toBeVisible();
     await expect(learner.locator("body")).not.toContainText("Privater Graph-Testkontext");

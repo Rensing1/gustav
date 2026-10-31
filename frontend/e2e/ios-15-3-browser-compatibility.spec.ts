@@ -124,18 +124,19 @@ for (const profile of ["camera", "combined", "modern"] as const) {
       await learner.page.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
       await expect(module).toBeInViewport();
       await learner.page.setViewportSize({ width: 768, height: 1024 });
-      await expect(learner.page.getByRole("navigation", { name: "Lernpfad nach Phasen" })).toBeVisible();
+      await expect(learner.page.locator(".svelte-flow")).toBeVisible();
       await expect(module).toBeInViewport();
       await module.click();
       await expect(learner.page.getByRole("button", { name: "Aufgabe 1 beginnen" })).toBeVisible();
       // Exercise client navigation back to the graph as well as direct entry.
       await learner.page.locator(".context-header__back").click();
-      await expect(learner.page.getByRole("navigation", { name: "Lernpfad nach Phasen" })).toBeVisible();
+      await expect(learner.page.locator(".svelte-flow")).toBeVisible();
       await learner.page.setViewportSize({ width: 1024, height: 768 });
-      const mobilePath = learner.page.getByRole("navigation", { name: "Lernpfad nach Phasen" });
-      await expect(mobilePath).toBeVisible();
-      await expect(mobilePath.getByRole("button", { name: /Modul öffnen.*Grundlagen/ })).toBeVisible();
-      await expect(mobilePath.getByRole("link", { name: "Quellen", exact: true })).toBeVisible();
+      await expect(learner.page.locator(".svelte-flow")).toBeVisible();
+      await learner.page.getByRole("button", { name: "Auswahl fokussieren", exact: true }).click();
+      await expect(module).toBeInViewport({ ratio: 0.999 });
+      await learner.page.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
+      await expect(learner.page.getByRole("button", { name: /Quellen/ })).toBeInViewport();
       expect(errors).toEqual([]);
     } finally {
       await learner.context.close();

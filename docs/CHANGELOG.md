@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-31
+
+- fix(learning): Der räumliche Modulgraph wird wieder auf allen Displaygrößen angezeigt. Auf schmalen Displays fokussiert eine neue Ansicht ein lesbares Modul; Gesamtansicht, Zoom und gespeicherte Kamera bleiben verfügbar. Die mobile Ersatzliste entfällt. Freischaltung und Lehrerbedienung bleiben unverändert.
+
 ## 2026-10-23
 
 - fix(keycloak): Theme-Dateien, gemeinsame Styles und Fonts erhalten beim Imagebau explizite lesbare Rechte; restriktive Checkout-Modi können Registrierung und Logout nicht mehr durch unlesbare Templates blockieren. Ein Imagevertrag prüft sämtliche Theme-Pfade als UID 1000/GID 0. Neuinstallations-/Upgrade-Smokes importieren den echten GUSTAV-Realm aus einem absichtlich restriktiven Build-Kontext und öffnen die Registrierung über den dynamischen Login-Link; der lokale authentifizierte Browser-Rundlauf prüft dasselbe Formular ohne Mailversand.

@@ -20,7 +20,7 @@ Der Lernraum ist die zentrale Arbeitsfläche der Lernenden. Er hält Kurs, Lernw
 ## Schritt für Schritt
 
 1. Die lernende Person öffnet **„Lernraum“** und wählt unter **„Aktuelle Kurse“** einen Kurs.
-2. Sie öffnet eine sichtbare Lerneinheit. Bei modularen Lerneinheiten zeigt der Graph den Lernweg und die Zustände der einzelnen Knoten. Auf schmalen Bildschirmen bis einschließlich 64 rem erscheint stattdessen eine nach Phasen geordnete Modulliste mit denselben Zugriffsregeln.
+2. Sie öffnet eine sichtbare Lerneinheit. Bei modularen Lerneinheiten zeigt der Graph den Lernweg und die Zustände der einzelnen Knoten. Der räumliche Graph bleibt auch auf Smartphones und Tablets verfügbar. Auf schmalen Bildschirmen beginnt eine neue Ansicht bei einem ausgewählten oder offenen Modul; wenn keines vorhanden ist, beim ersten Modul. Der Graph lässt sich verschieben und vergrößern. „Gesamtansicht“ zeigt alle Phasen, „Auswahl fokussieren“ führt zum lesbaren Modul zurück. Ein bereits gespeicherter Ausschnitt wird beim Wiederöffnen wiederhergestellt.
 3. Sie wählt einen offenen Knoten beziehungsweise Abschnitt. Materialien und Aufgaben erscheinen in der Arbeitsfläche.
 4. Markdown-Texte werden direkt gelesen. Dateien werden über **„Datei öffnen“** geladen. Eine interaktive Simulation wird bewusst mit **„Simulation starten“** geöffnet und kann zurückgesetzt oder geschlossen werden.
 5. Eine Aufgabe öffnet ihren Arbeitsraum mit Rückweg zum Modul beziehungsweise zu den Inhalten. Weitere Kontextaktionen stehen im Menü der Kopfzeile. Die Bearbeitung kann später wieder aufgenommen werden, soweit der gespeicherte Zustand dies unterstützt; ein ungesendeter Textentwurf bleibt an den aktuellen Tab gebunden.

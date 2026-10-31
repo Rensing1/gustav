@@ -20,7 +20,7 @@ The learning workspace is the central workspace for learners. It keeps the cours
 ## Step by step
 
 1. The learner opens **„Lernraum“** (“Learning workspace”) and selects a course under **„Aktuelle Kurse“** (“Current courses”).
-2. They open a visible learning unit. In modular learning units, the graph shows the learning path and the states of individual nodes. On narrow screens up to and including 64 rem, a module list grouped by phase provides the same access rules.
+2. They open a visible learning unit. In modular learning units, the graph shows the learning path and the states of individual nodes. The spatial graph remains available on phones and tablets. On narrow screens, a new view starts at a selected or open module, falling back to the first module. Learners can pan and zoom the graph. “Gesamtansicht” shows all phases; “Auswahl fokussieren” returns to a readable module. A previously saved camera position is restored when reopening the graph.
 3. They select an open node or section. Materials and tasks appear in the workspace.
 4. Markdown texts are read directly. Files are loaded using **„Datei öffnen“** (“Open file”). An interactive simulation is deliberately opened with **„Simulation starten“** (“Start simulation”) and can be reset or closed.
 5. A task opens its workspace with a return action to the module or contents. Further context actions are available in the header menu. Learners can resume work where the saved state supports this; an unsent text draft remains tied to the current tab.

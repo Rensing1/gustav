@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import MobileLearningPath from "./MobileLearningPath.svelte";
+  import { learnerGraphFocusId } from "$lib/learning-unit/graph-selection";
   import { SvelteFlow } from "@xyflow/svelte";
   import { fitGraphToScreen, graphAriaLabels } from "$lib/graph/graph-presentation";
   import "@xyflow/svelte/dist/style.css";
@@ -51,7 +51,7 @@
 
 <GraphStageFrame chromeless eyebrow="Lernpfad" title="Lernpfad">
   {#snippet children()}
-    <section use:fitGraphToScreen class:learning-unit-stage--mobile-path={compact} class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
+    <section use:fitGraphToScreen class="learning-unit-stage learning-unit-stage--graph teacher-flow-workspace teacher-flow-shell learning-flow-shell">
       {#if error}
         <div role="alert">
           <p>{error}</p>
@@ -60,11 +60,9 @@
       {:else if busy && nodes.length === 0}
         <p role="status">Lernpfad wird aufgebaut …</p>
       {:else if graph && nodes.length > 0}
-        {#if compact}
-          <MobileLearningPath {graph} onOpen={(id) => nodes.find((node) => node.id === id)?.data.onSelect?.()} />
-        {:else}
         <SvelteFlow
           ariaLabelConfig={graphAriaLabels}
+          attributionPosition="bottom-left"
           bind:nodes={nodes}
           bind:edges={edges}
           class="teacher-flow-canvas"
@@ -81,11 +79,10 @@
         >
           <GraphViewportControls
             storageKey={`gustav:learner-graph:${graph.unit.id}:viewport`}
-            initialNodeId={nodes.find((node) => node.selected)?.id ?? nodes.find((node) => node.type === "phaseBand")?.id ?? null}
+            initialNodeId={learnerGraphFocusId(nodes, compact)}
             showInteractionToggle={false}
           />
         </SvelteFlow>
-        {/if}
       {:else if graph}
         <p class="learning-unit-empty-copy">Der Lernpfad enthält noch keine Module.</p>
       {:else}

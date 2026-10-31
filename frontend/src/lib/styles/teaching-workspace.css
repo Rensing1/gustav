@@ -2730,7 +2730,7 @@
   opacity: 1;
   cursor: not-allowed;
 }
-@media (max-width: 640px) {
+@media (max-width: 640px), (any-pointer: coarse) {
   .teacher-flow-shell .svelte-flow__controls-button {
     min-width: var(--layout-control-min);
     min-height: var(--layout-control-min);

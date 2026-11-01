@@ -140,3 +140,58 @@ def test_shared_adapter_handles_timeout_and_empty_input():
         render_sources(
             [SOURCE], deadline=time.monotonic() + 10, transport=httpx.MockTransport(timeout)
         )
+
+
+@pytest.mark.parametrize("below_limit", [False, True])
+def test_output_budget_counts_every_occurrence_at_the_exact_boundary(below_limit):
+    import json
+    import time
+
+    import httpx
+
+    from backend.diagram_renderer import DiagramRenderError, render_sources
+
+    content = png()
+    sources = [SOURCE, "bad", SOURCE, SOURCE]
+    limit = len(content) * 3 - int(below_limit)
+
+    def respond(request):
+        # Repeated output must count fully without doing repeated rendering work.
+        assert len(json.loads(request.content)["diagrams"]) == 2
+        return httpx.Response(200, json={"diagrams": [
+            {"id": diagram_key("bad"), "error": "invalid_diagram"},
+            {"id": diagram_key(SOURCE), "png": base64.b64encode(content).decode()},
+        ]})
+
+    def render():
+        return render_sources(
+            sources, deadline=time.monotonic() + 10,
+            max_output_bytes=limit, transport=httpx.MockTransport(respond),
+        )
+
+    if below_limit:
+        with pytest.raises(DiagramRenderError, match="^output_too_large$") as error:
+            render()
+        assert error.value.status == 413
+    else:
+        result = render()
+        assert result[0] == result[2] == result[3]
+        assert result[1] == {"error": "invalid_diagram"}
+
+
+@pytest.mark.parametrize("status,code", [(413, "output_too_large"), (500, "renderer_unavailable"), (503, "renderer_unavailable")])
+def test_shared_adapter_preserves_size_errors_without_exposing_diagnostics(status, code):
+    import time
+
+    import httpx
+
+    from backend.diagram_renderer import DiagramRenderError, render_sources
+
+    with pytest.raises(DiagramRenderError, match=f"^{code}$") as error:
+        render_sources(
+            [SOURCE], deadline=time.monotonic() + 10,
+            transport=httpx.MockTransport(lambda request: httpx.Response(
+                status, text="private renderer diagnostic",
+            )),
+        )
+    assert error.value.status == (413 if status == 413 else 503)

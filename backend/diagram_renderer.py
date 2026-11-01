@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import time
+from collections import Counter
 from io import BytesIO
 
 import httpx
@@ -43,11 +44,16 @@ def render_sources(
     """Render a batch in input order, including duplicates, with checked PNGs.
 
     `deadline` covers transport and output checks; `max_output_bytes` bounds
-    decoded images. The optional HTTP transport permits isolated adapter tests.
+    decoded images across all returned occurrences, including duplicates. The
+    caller must authorize the sources. Oversized output raises a stable 413;
+    technical failures raise 503 without exposing renderer diagnostics. The
+    optional HTTP transport permits isolated adapter tests.
     """
     if not sources:
         return []
-    definitions = {diagram_key(source): source for source in sources}
+    keys = [diagram_key(source) for source in sources]
+    occurrences = Counter(keys)
+    definitions = dict(zip(keys, sources, strict=True))
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise DiagramRenderError("render_timeout")
@@ -65,6 +71,8 @@ def render_sources(
                     "max_output_bytes": max_output_bytes,
                 },
             ) as response:
+                if response.status_code == 413:
+                    raise DiagramRenderError("output_too_large", 413)
                 response.raise_for_status()
                 chunks, size = [], 0
                 for chunk in response.iter_bytes():
@@ -83,7 +91,8 @@ def render_sources(
                 results[entry["id"]] = {"error": entry["error"]}
                 continue
             content = base64.b64decode(entry["png"], validate=True)
-            total += len(content)
+            # Render and validate once, but budget every copy serialized for the caller.
+            total += len(content) * occurrences[entry["id"]]
             if total > max_output_bytes:
                 raise DiagramRenderError("output_too_large", 413)
             with Image.open(BytesIO(content)) as image:
@@ -93,7 +102,7 @@ def render_sources(
                 width, height = (image.width + 2) // 3, (image.height + 2) // 3
                 image.verify()
             results[entry["id"]] = {"png": entry["png"], "width": width, "height": height}
-        return [results[diagram_key(source)] for source in sources]
+        return [results[key] for key in keys]
     except DiagramRenderError:
         raise
     except httpx.TimeoutException as exc:

@@ -97,7 +97,7 @@ test("@feature-acceptance authors Mermaid through the editor, reopens, reads and
     for (const [index, name] of Object.keys(fixtures).entries()) {
       expect(renderedTypes[index].png, name).toBeTruthy();
     }
-    const gallerySource = "# Mermaid-Typen\n\n```mermaid\nflowchart LR\nA[Start] --> B[Ziel]\n```\n\n```mermaid\nnot-a-diagram\n```\n\n```html\n<div>Beispiel</div>\n\t<script>window.__markdownExecution = true</script>\n```";
+    const gallerySource = "# Mermaid-Typen\n\n```mermaid\nflowchart LR\nA[Start] --> B[Ziel]\n```\n\n```mermaid\nnot-a-diagram\n```\n\n```mermaid\nsankey-beta\nA,B,1\nB,A,1\n```\n\n```mermaid\nsequenceDiagram\nA->>B: Weiter nach dem Fehler\n```\n\n```html\n<div>Beispiel</div>\n\t<script>window.__markdownExecution = true</script>\n```";
     await expectApiOk(await teacher.request.patch(`/api/teaching/units/${seeded.unitId}/modules/${seeded.graphModuleId}/tasks/${seeded.taskId}`, {
       headers: apiHeaders(), data: { instruction_md: gallerySource }
     }));
@@ -110,6 +110,9 @@ test("@feature-acceptance authors Mermaid through the editor, reopens, reads and
     await expect(gallery).toBeAttached();
     await expect(gallery.locator(".markdown-diagram").nth(0).locator("img")).toBeVisible({ timeout: 30_000 });
     await expect(gallery.locator(".markdown-diagram").nth(1).getByRole("status")).toContainText("Das Diagramm konnte nicht dargestellt werden");
+    await expect(gallery.locator(".markdown-diagram").nth(2).getByRole("status")).toContainText("Das Diagramm konnte nicht dargestellt werden");
+    await expect(gallery.locator(".markdown-diagram").nth(2).locator("pre")).toContainText("sankey-beta");
+    await expect(gallery.locator(".markdown-diagram").nth(3).locator("img")).toBeVisible();
     expect(await gallery.locator("code.language-html").textContent()).toContain("\t<script>window.__markdownExecution = true</script>");
     await expect(gallery.locator("code.language-html").locator("..")).toHaveCSS("white-space", "pre");
     expect(await learner.evaluate(() => (window as unknown as { __markdownExecution?: boolean }).__markdownExecution)).toBeUndefined();
@@ -122,8 +125,9 @@ test("@feature-acceptance authors Mermaid through the editor, reopens, reads and
     const pdfPath = info.outputPath("mermaid-print.pdf");
     await download.saveAs(pdfPath);
     const inspected = JSON.parse(execFileSync(resolve("../.venv/bin/python"), ["-c", "import json,sys\nfrom pypdf import PdfReader\np=PdfReader(sys.argv[1]).pages\nprint(json.dumps({'images':sum(len(x.images) for x in p),'text':' '.join(x.extract_text() for x in p)}))", pdfPath]).toString());
-    expect(inspected.images).toBeGreaterThanOrEqual(2);
+    expect(inspected.images).toBeGreaterThanOrEqual(3);
     expect(inspected.text).toContain("Das Diagramm konnte nicht dargestellt werden");
+    expect(inspected.text).toContain("sankey-beta");
     expect(inspected.text).not.toContain("Alice->>Bob: Hallo");
     expect(inspected.text).toContain("Grundrechte und digitale Kommunikation");
     const denied = await learner.request.post(`/api/teaching/units/${seeded.unitId}/printable-pdf`, { headers: apiHeaders(), data: { material_ids: [], task_ids: [] } });

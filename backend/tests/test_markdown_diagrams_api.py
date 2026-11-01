@@ -108,3 +108,45 @@ async def test_technical_failure_is_not_a_content_error(monkeypatch):
     assert response.status_code == 503
     assert response.json()["error"] == "render_timeout"
     assert response.headers["cache-control"] == "private, no-store"
+
+
+@pytest.mark.parametrize("cause", ["repeated_output", "renderer_413"])
+async def test_output_limit_reaches_browser_as_private_413(monkeypatch, cause):
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    from backend.diagram_renderer import diagram_key, render_sources
+
+    store = install_session_store(monkeypatch, main)
+    session = store.create(sub="diagram-budget-user", roles=["student"], name="User")
+    routes = importlib.import_module("backend.web.routes.markdown_diagrams")
+    source = "flowchart LR\nA-->B"
+    stream = BytesIO()
+    Image.new("RGB", (200, 100), "white").save(stream, format="PNG")
+    content = stream.getvalue()
+
+    def respond(request):
+        if cause == "renderer_413":
+            return httpx.Response(413, text="private renderer diagnostic")
+        return httpx.Response(200, json={"diagrams": [{
+            "id": diagram_key(source), "png": base64.b64encode(content).decode(),
+        }]})
+
+    def render(sources, **kwargs):
+        # Exercise the real adapter and route; only transport and budget are controlled.
+        kwargs["max_output_bytes"] = len(content) * 2
+        return render_sources(sources, transport=httpx.MockTransport(respond), **kwargs)
+
+    monkeypatch.setattr(routes, "render_sources", render)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=main.app), base_url="http://test"
+    ) as client:
+        client.cookies.set("gustav_session", session.session_id)
+        response = await client.post(
+            PATH, headers={"Origin": "http://test"}, json={"sources": [source] * 3},
+        )
+    assert response.status_code == 413
+    assert response.json() == {"error": "output_too_large"}
+    assert response.headers["cache-control"] == "private, no-store"

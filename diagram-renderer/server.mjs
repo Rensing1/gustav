@@ -80,11 +80,14 @@ const server = http.createServer(async (request, response) => {
         output.style.width = '';
         output.style.height = '';
         document.body.style.background = config.darkMode ? '#1f2020' : 'white';
+        let rendered;
         try {
           await window.mermaid.parse(source);
+          // Valid syntax can still fail layout (for example a cyclic Sankey).
+          // Browser/transport failures remain outside this per-definition boundary.
+          rendered = await window.mermaid.render('print-diagram', source);
         } catch { return { error: 'invalid_diagram' }; }
-        const { svg } = await window.mermaid.render('print-diagram', source);
-        output.innerHTML = svg;
+        output.innerHTML = rendered.svg;
         const element = output.querySelector('svg');
         element.style.maxWidth = 'none';
         const naturalWidth = element.viewBox.baseVal.width;
@@ -99,7 +102,7 @@ const server = http.createServer(async (request, response) => {
       const element = await page.$('#output');
       const bytes = await element.screenshot({ type: 'png' });
       outputBytes += bytes.length;
-      if (outputBytes > outputLimit) throw new Error('output_limit');
+      if (outputBytes > outputLimit) return send(response, 413, { error: 'output_too_large' });
       results.push({ id: diagram.id, png: Buffer.from(bytes).toString('base64') });
     }
     send(response, 200, { diagrams: results });

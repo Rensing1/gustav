@@ -10905,8 +10905,11 @@ paths:
         Accepts submitted diagram source only; no stored content is read or persisted.
         Requires an authenticated teacher or student and a same-origin browser request.
         At most 100 definitions and 200000 source characters in total are accepted.
-        Syntax and diagram-size errors are returned per definition; technical renderer
-        failures fail the batch. All native types of the pinned Mermaid release are supported.
+        Syntax, content-dependent rendering and diagram-size errors are returned per
+        definition; technical renderer failures fail the batch. The output budget is
+        8 MiB of decoded PNG bytes across all returned occurrences, including duplicates
+        even when rendered only once. Exceeding this budget fails the batch with 413.
+        All native types of the pinned Mermaid release are supported.
       operationId: renderMarkdownDiagrams
       security: [{ cookieAuth: [] }]
       x-security-notes:

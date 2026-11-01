@@ -1,5 +1,5 @@
 """
-Helpers for configuring DSPy LMs with GPT-OSS think levels.
+Helpers for configuring model-specific DSPy reasoning controls.
 
 Why:
     GPT-OSS requires an explicit `think` level (`low|medium|high`). Without it,
@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional
 
 _ALLOWED_THINK_LEVELS = {"low", "medium", "high"}
 _ALLOWED_REASONING_EFFORTS = {"none", "high"}
+_MISTRAL_LARGE_4_MODELS = {"mistral-large-4", "mistral-large-4-0"}
+_MISTRAL_LARGE_4_EFFORTS = {"low", "medium", "high"}
 
 def _model_leaf(model_name: str) -> str:
     """
@@ -53,8 +55,18 @@ def normalize_reasoning_effort(raw: str | None) -> str:
 
 
 def resolve_reasoning_effort(model_name: str, reasoning_effort: str | None) -> str | None:
-    """Only return a reasoning effort for Magistral reasoning models."""
+    """Apply each supported model family's own reasoning vocabulary.
+
+    Large 4 has no ``none`` mode. Reject explicit invalid values instead of
+    silently requesting a different reasoning budget; omitted values use low.
+    Keep the existing Magistral normalization and unrelated models unchanged.
+    """
     leaf = _model_leaf(model_name).lower()
+    if leaf in _MISTRAL_LARGE_4_MODELS:
+        effort = (reasoning_effort or "").strip().lower() or "low"
+        if effort not in _MISTRAL_LARGE_4_EFFORTS:
+            raise ValueError("Mistral Large 4 reasoning_effort must be low, medium or high")
+        return effort
     if not leaf.startswith("magistral"):
         return None
     return normalize_reasoning_effort(reasoning_effort)
@@ -77,3 +89,31 @@ def build_lm_kwargs(
     if maybe_think:
         kwargs["extra_body"] = {"think": maybe_think}
     return kwargs
+
+
+def build_reasoning_kwargs(model_name: str, reasoning_effort: str | None) -> Dict[str, Any]:
+    """Forward supported reasoning even when LiteLLM's model catalog lags.
+
+    Scope the explicit parameter allowance to Large 4. Never globally drop
+    unsupported parameters: that would silently lose the requested budget.
+    """
+    effort = resolve_reasoning_effort(model_name, reasoning_effort)
+    if effort is None:
+        return {}
+    kwargs: Dict[str, Any] = {"reasoning_effort": effort}
+    if _model_leaf(model_name).lower() in _MISTRAL_LARGE_4_MODELS:
+        kwargs["allowed_openai_params"] = ["reasoning_effort"]
+    return kwargs
+
+
+def normalize_large4_transport(model_name: str) -> str:
+    """Use LiteLLM's Mistral parser for Large 4's thinking/text chunk lists.
+
+    The generic OpenAI parser only accepts string content. Keep the supplied
+    endpoint/key and all unrelated models or explicit alternative providers.
+    """
+    leaf = _model_leaf(model_name).lower()
+    prefix = model_name.rsplit("/", 1)[0] if "/" in model_name else ""
+    if leaf in _MISTRAL_LARGE_4_MODELS and prefix in {"", "openai", "mistral"}:
+        return f"mistral/{leaf}"
+    return model_name

@@ -287,6 +287,7 @@ def _normalize_model_name(raw: str) -> str:
     model = (raw or "").strip()
     if not model:
         return ""
+    model = dspy_helpers.normalize_large4_transport(model)
     # Allow advanced users to provide an explicit provider prefix.
     if "/" in model:
         return model
@@ -387,9 +388,7 @@ class _LocalFeedbackAdapter:
         maybe_think = dspy_helpers.resolve_think_level(model, think_level)
         if maybe_think:
             lm_kwargs["extra_body"] = {"think": maybe_think}
-        maybe_reasoning_effort = dspy_helpers.resolve_reasoning_effort(model, reasoning_effort)
-        if maybe_reasoning_effort:
-            lm_kwargs["reasoning_effort"] = maybe_reasoning_effort
+        lm_kwargs.update(dspy_helpers.build_reasoning_kwargs(model, reasoning_effort))
         if num_retries is not None:
             lm_kwargs["num_retries"] = num_retries
         return dspy.LM(model, **lm_kwargs)  # type: ignore[attr-defined]

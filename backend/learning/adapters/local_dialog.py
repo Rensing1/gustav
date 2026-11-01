@@ -13,6 +13,7 @@ from backend.learning.adapters.local_feedback import _require_secure_openai_base
 
 def _model_name(raw: str) -> str:
     value = raw.strip()
+    value = dspy_helpers.normalize_large4_transport(value)
     if not value or "/" in value:
         return value
     return f"openai/{value}"
@@ -56,9 +57,7 @@ class LocalDialogGenerator:
         think = dspy_helpers.resolve_think_level(self._model, os.getenv("AI_TEXT_THINK_LEVEL"))
         if think:
             kwargs["extra_body"] = {"think": think}
-        effort = dspy_helpers.resolve_reasoning_effort(self._model, os.getenv("AI_TEXT_REASONING_EFFORT"))
-        if effort:
-            kwargs["reasoning_effort"] = effort
+        kwargs.update(dspy_helpers.build_reasoning_kwargs(self._model, os.getenv("AI_TEXT_REASONING_EFFORT")))
         self._lm = dspy.LM(self._model, **kwargs)
         return self._lm
 

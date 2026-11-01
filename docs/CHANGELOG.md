@@ -2,6 +2,8 @@
 
 ## 2026-11-01
 
+- feat(learning): Private Markdown-Aufgabenentwürfe werden automatisch im Schülerkonto gespeichert und nach erneutem Anmelden geräteübergreifend geladen. Eine Speicheranzeige, Tab-Wiederherstellung und gesicherte Navigation schützen unbestätigte Änderungen. Entwürfe bleiben getrennt von Rückmeldungen, Abgaben und Versuchszählern; RLS schützt Zugriff und Freigaben.
+
 - fix(markdown): Wiederholte Diagramme zählen vollständig zum Ausgabebudget. Inhaltliche Renderfehler wie zyklische Sankey-Diagramme lassen gültige Nachbardiagramme und den PDF-Export bestehen; überschrittene Stapelausgaben erreichen den Browser zuverlässig als HTTP 413. Grenzwert-, Dienst- und authentifizierte Browser-/PDF-Regressionen ergänzt.
 
 - feat(markdown): Codeblöcke erhalten Zeilenumbrüche, Einrückungen und HTML-Beispiele als ungefährlichen Text. Ausdrücklich markierte Mermaid-Blöcke werden in Markdown-Ansichten und der PDF-Druckfassung grafisch dargestellt. Quelltext, Fehlerhinweise und Hell-/Dunkeldarstellung bleiben zugänglich; der Editor behält seine bisherigen Bedienelemente.

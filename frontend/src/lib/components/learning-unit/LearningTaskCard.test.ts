@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
 
@@ -28,6 +28,11 @@ const stopFormTransport: SubmitFunction = ({ cancel }) => cancel();
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 describe("LearningTaskCard", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => init?.method === "PUT"
+      ? Response.json({ ...JSON.parse(init.body), updated_at: "2026-11-01T10:00:00Z" })
+      : new Response(null, { status: 204 })));
+  });
   it("offers feedback for new text after a reviewed image and protects the reviewed answer", async () => {
     render(LearningTaskCard, { props: {
       courseId: "course-1", learnerSub: "student-1", task: { ...task, has_submission: true },
@@ -38,6 +43,7 @@ describe("LearningTaskCard", () => {
     } });
     await fireEvent.click(screen.getByLabelText("Text schreiben"));
     const editor = document.querySelector('textarea[name="text_body"]')!;
+    await waitFor(() => expect(editor).toBeEnabled());
     await fireEvent.input(editor, { target: { value: "Meine neue schriftliche Begründung." } });
     expect(screen.getByRole("button", { name: "Neue Rückmeldung einholen" })).toBeEnabled();
     await fireEvent.click(screen.getByRole("button", { name: "Abgeben" }));
@@ -66,6 +72,7 @@ describe("LearningTaskCard", () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     window.localStorage.clear();
     window.sessionStorage.clear();
@@ -122,7 +129,7 @@ describe("LearningTaskCard", () => {
     expect(window.localStorage.getItem(legacyKey)).toBeNull();
   });
 
-  it("coalesces rapid draft writes and flushes the newest value when the page is hidden", async () => {
+  it("keeps the newest recovery text when the page is hidden", async () => {
     const scopedKey = "gustav.learning.submission-draft:student-2:course-1:task-1:text";
     render(LearningTaskCard, {
       props: {
@@ -137,16 +144,13 @@ describe("LearningTaskCard", () => {
     });
 
     const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
-    await waitFor(() => expect(editor).toBeInTheDocument());
+    await waitFor(() => expect(editor).toBeEnabled());
     const setItem = vi.spyOn(Storage.prototype, "setItem");
 
     await fireEvent.input(editor, { target: { value: "E" } });
     await fireEvent.input(editor, { target: { value: "En" } });
     await fireEvent.input(editor, { target: { value: "Entwurf" } });
-    expect(setItem).not.toHaveBeenCalled();
-
     window.dispatchEvent(new Event("pagehide"));
-    expect(setItem).toHaveBeenCalledTimes(1);
     expect(setItem).toHaveBeenCalledWith(scopedKey, "Entwurf");
     expect(window.sessionStorage.getItem(scopedKey)).toBe("Entwurf");
     setItem.mockRestore();
@@ -217,6 +221,7 @@ describe("LearningTaskCard", () => {
     });
 
     const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor).toBeEnabled());
     await fireEvent.input(editor, { target: { value: "Lokale Überarbeitung" } });
     const feedbackSummary = screen.getByText("Rückmeldung");
 
@@ -441,6 +446,7 @@ describe("LearningTaskCard", () => {
     });
 
     const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor).toBeEnabled());
     await fireEvent.input(editor, { target: { value: "Gerade bearbeiteter Entwurf" } });
 
     await rerender({
@@ -1223,6 +1229,7 @@ describe("LearningTaskCard", () => {
     });
 
     const editor = document.querySelector('textarea[name="text_body"]') as HTMLTextAreaElement;
+    await waitFor(() => expect(editor).toBeEnabled());
     await fireEvent.input(editor, { target: { value: "Mein erhaltener Entwurf" } });
 
     await fireEvent.click(screen.getByRole("radio", { name: "Datei hochladen" }));
@@ -1232,7 +1239,7 @@ describe("LearningTaskCard", () => {
 
     await fireEvent.click(screen.getByRole("radio", { name: "Text schreiben" }));
     expect(editor.closest(".learning-submission-mode-panel")).not.toHaveAttribute("hidden");
-    expect(editor.value).toBe("Mein erhaltener Entwurf");
+    await waitFor(() => expect(editor.value).toBe("Mein erhaltener Entwurf"));
 
     await fireEvent.click(screen.getByRole("radio", { name: "Datei hochladen" }));
     expect(screen.getByText("beleg.pdf")).toBeVisible();

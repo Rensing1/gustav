@@ -139,6 +139,8 @@ def _data_access(path: str) -> str:
 
 
 def _test_candidates(path: str) -> str:
+    if path == "/api/learning/courses/{course_id}/tasks/{task_id}/draft":
+        return "backend/tests/test_learning_task_drafts.py, frontend/e2e/learner-draft-persistence.spec.ts"
     if path == "/api/markdown/diagrams":
         return "backend/tests/test_markdown_diagrams_api.py, frontend/e2e/markdown-code-diagrams.spec.ts"
     if path in {"/", "/about"}:

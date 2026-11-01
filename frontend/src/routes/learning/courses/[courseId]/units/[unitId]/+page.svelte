@@ -5,6 +5,30 @@
   const getModularGeometry = createModularGeometryCache();
   import { createSubmissionPreviewLoader, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import { applyAction } from "$app/forms";
+  import { beforeNavigate, goto } from "$app/navigation";
+  import { allowTaskDraftExit, hasPendingTaskDrafts, saveActiveTaskDrafts } from "$lib/learning-unit/task-draft-persistence";
+
+  async function allowDraftNavigation(): Promise<boolean> {
+    if (await saveActiveTaskDrafts()) return true;
+    const allowed = window.confirm("Dein Entwurf ist noch nicht auf dem Server gespeichert. Trotzdem wechseln? Ungesicherte Änderungen bleiben nur in diesem Tab erhalten.");
+    if (allowed) allowTaskDraftExit();
+    return allowed;
+  }
+  let resumingDraftNavigation = false;
+  beforeNavigate((navigation) => {
+    // Same-unit Back/Forward uses the existing workspace popstate handler.
+    const unitPath = `/learning/courses/${data.courseId}/units/${data.unitId}`;
+    if (navigation.type === "popstate" && navigation.to?.url.pathname === unitPath) return;
+    // Full document links are captured below; other exits use beforeunload.
+    if (navigation.willUnload || resumingDraftNavigation || !hasPendingTaskDrafts() || !navigation.to) return;
+    navigation.cancel();
+    const target = navigation.to.url.href;
+    void allowDraftNavigation().then(async (allowed) => {
+      if (!allowed) return;
+      resumingDraftNavigation = true;
+      try { await goto(target); } finally { resumingDraftNavigation = false; }
+    });
+  });
   import { browser } from "$app/environment";
   import { onMount, onDestroy, getContext, tick, untrack } from "svelte";
   import { workspaceNavigationKey, type WorkspaceNavigation } from "$lib/types/workspace-navigation";
@@ -321,6 +345,7 @@
   }
 
   async function beginTaskWorkspace(itemKey: string, editorMode: "text" | "upload") {
+    if (hasPendingTaskDrafts() && !(await allowDraftNavigation())) return;
     const item = currentContentItems().find((candidate) => candidate.key === itemKey && candidate.task);
     if (!item?.task) {
       return;
@@ -365,10 +390,12 @@
   }
 
   async function leaveTaskWorkspace(destination: LearnerReturnDestination) {
+    if (!(await saveActiveTaskDrafts())) return;
     await returnToLearnerDestination(destination);
   }
 
   async function returnToLearnerDestination(destination: LearnerReturnDestination) {
+    if (hasPendingTaskDrafts() && !(await allowDraftNavigation())) return;
     const { target, restorablePosition: position } = resolveLearnerReturnNavigation({
       destination,
       activeTaskModuleId: learnerWorkspace.activeTask?.moduleId ?? null,
@@ -1325,6 +1352,7 @@
   }
 
   async function openModule(moduleId: string) {
+    if (hasPendingTaskDrafts() && !(await allowDraftNavigation())) return;
     const module = graphModuleById(moduleId);
     if (!module || (module.status !== "open" && module.status !== "done")) {
       return;
@@ -1722,9 +1750,41 @@
       restoreHistoryContext();
     }
     void restoreSurfaceFromUrl();
-    const handlePopState = () => void restoreSurfaceFromUrl();
+    const unitPath = `/learning/courses/${data.courseId}/units/${data.unitId}`;
+    const handlePopState = async () => {
+      if (window.location.pathname !== unitPath) return;
+      if (hasPendingTaskDrafts() && !(await allowDraftNavigation())) {
+        const task = learnerWorkspace.activeTask;
+        syncLearnerNavigation({ surface: learnerWorkspace.surface, moduleId: task?.moduleId ?? modularWorkspace.activeTab,
+          taskId: task?.taskId ?? null, panel: task?.status === "result" ? "result" : null }, "replace");
+        return;
+      }
+      await restoreSurfaceFromUrl();
+    };
+    // The shared header deliberately uses full-document links. Capture those
+    // clicks before navigation so saving can finish; beforeunload cannot await.
+    const handleLink = (event: MouseEvent) => {
+      if (!hasPendingTaskDrafts() || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!link || link.hasAttribute("download") || link.target && link.target !== "_self") return;
+      const target = new URL(link.href, window.location.href);
+      if (target.origin !== window.location.origin || target.pathname === window.location.pathname && target.search === window.location.search) return;
+      event.preventDefault();
+      void allowDraftNavigation().then(async (allowed) => {
+        if (!allowed) return;
+        resumingDraftNavigation = true;
+        try {
+          if (link.hasAttribute("data-sveltekit-reload")) window.location.assign(target.href);
+          else await goto(target.href);
+        } finally { resumingDraftNavigation = false; }
+      });
+    };
     window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    document.addEventListener("click", handleLink, true);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("click", handleLink, true);
+    };
   });
 
   $effect(() => {

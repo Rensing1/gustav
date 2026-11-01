@@ -11,9 +11,9 @@ Review cadence: nach größeren DB/RLS-Teständerungen und vor Änderungen an Te
 Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. Echte DB/RLS-Kandidaten müssen entweder `db_read`/`db_write` tragen, über einen bestehenden Opt-in-Marker laufen oder bewusst als servicefreie bzw. Test-Infrastruktur klassifiziert sein. Es verändert keine Tests und ersetzt keine Sicherheitsprüfung.
 
 ## Zusammenfassung
-- Inventarisierte Dateien: 151
+- Inventarisierte Dateien: 152
 - Echte DB/RLS-Kandidaten ohne `db_read`/`db_write`: 0
-- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 108
+- Echte DB/RLS-Kandidaten mit `db_read`/`db_write`: 109
 - Echte DB/RLS-Kandidaten mit bestehendem Opt-in-Marker: 9
 - Supabase-Storage-/Konfigurationsverträge ohne echte DB-Verbindung: 14
 - Statische Migrationstests ohne echte DB-Verbindung: 12
@@ -102,6 +102,7 @@ Dieses Inventar macht DB-, RLS-, Migrations- und Supabase-nahe Tests sichtbar. E
 | backend/tests/test_learning_submission_preview_api.py | real-db | db_write | marked-db | env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import | Keep marker and isolation visible |
 | backend/tests/test_learning_submission_storage_verification.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_learning_submissions_idempotency_header.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
+| backend/tests/test_learning_task_drafts.py | real-db | db_write | marked-db | env:RLS_TEST_DSN, env:SERVICE_ROLE_DSN, psycopg-connect, psycopg-import, rls | Keep marker and isolation visible |
 | backend/tests/test_learning_unit_sections_api.py | real-db | db_write | marked-db | requires-db | Keep marker and isolation visible |
 | backend/tests/test_learning_upload_intent_public_host.py | storage-or-config | - | no-db-marker-needed | supabase | Keep service-free unless it reaches the real DB |
 | backend/tests/test_learning_visual_upload_only_api.py | real-db | db_write | marked-db | env:DATABASE_URL, env:RLS_TEST_SERVICE_DSN, env:SERVICE_ROLE_DSN, requires-db | Keep marker and isolation visible |

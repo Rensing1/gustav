@@ -101,6 +101,7 @@ from backend.web.routes.learning_submission_processing import (
 from backend.web.routes.learning_submission_processing import (
     validate_submission_payload as _validate_submission_payload,  # noqa: F401
 )
+from backend.web.routes.learning_task_drafts import learning_task_drafts_router
 from backend.web.routes.learning_upload_config import (
     dev_upload_stub_enabled as _dev_upload_stub_enabled,  # noqa: F401 - kept for route module compatibility
 )
@@ -133,6 +134,7 @@ from backend.web.routes.learning_upload_proxy import (
 )
 
 learning_router = APIRouter(tags=["Learning"])
+learning_router.include_router(learning_task_drafts_router)
 learning_router.include_router(learning_h5p_router)
 learning_router.include_router(learning_section_router)
 learning_router.include_router(learning_course_router)

@@ -10,10 +10,8 @@
   import MarkdownWysiwygEditor from "$lib/components/ui/MarkdownEditor.svelte";
   import ChoiceSwitch from "$lib/components/ui/ChoiceSwitch.svelte";
   import StatusMessage, { type StatusMessageTone } from "$lib/components/ui/StatusMessage.svelte";
-  import {
-    legacySubmissionDraftStorageKey,
-    submissionDraftStorageKey
-  } from "$lib/learning-unit/submission-drafts";
+  import { removeLegacySubmissionDraft } from "$lib/learning-unit/submission-drafts";
+  import { createTaskDraftPersistence, type DraftState } from "$lib/learning-unit/task-draft-persistence";
   import { taskInstructionPreview, taskPreviewIsVisuallyClipped } from "$lib/learning-unit/task-preview";
   import {
     finalSubmissionIdempotencyKey,
@@ -157,8 +155,8 @@
   type SubmissionMode = "text" | "upload";
   type UploadTaskKind = Extract<LearningTask["kind"], "native" | "visual" | "scratch" | "calliope" | "filius">;
   type CompactTaskTone = "new" | "draft" | "pending" | "final" | "error";
-  const DRAFT_PERSIST_DELAY_MS = 200;
   let draftText = $state("");
+  let fallbackEdited = false;
   let editorMode = $state<SubmissionMode>("text");
   let selectedUploadFile = $state<File | null>(null);
   let hideExistingUpload = $state(false);
@@ -177,11 +175,9 @@
   let feedbackDisclosureOpen = $state(untrack(() => reviewPanelOpen));
   let submissionDisclosureOpen = $state(false);
   let taskPreviewVisuallyClipped = $state(false);
-  let pendingDraftWrite: { key: string; value: string } | null = null;
-  let draftPersistTimer: ReturnType<typeof setTimeout> | null = null;
-  let restoredSessionDraft = $state(false);
-  let draftEditedSinceRestore = $state(false);
-  let reconciledFeedbackSubmissionId = $state<string | null>(null);
+  let draftController = $state<ReturnType<typeof createTaskDraftPersistence> | null>(null);
+  let draftView = $state<DraftState | null>(null);
+
 
   function uploadOnly(): boolean {
     return task.kind === "visual" || task.kind === "scratch" || task.kind === "calliope" || task.kind === "filius";
@@ -353,70 +349,33 @@
     return isUploadSubmission(latestSubmission()) ? "upload" : "text";
   }
 
-  function legacyDraftStorageKey(mode: SubmissionMode = editorMode): string {
-    return legacySubmissionDraftStorageKey({ courseId, taskId: task.id, mode });
-  }
-
-  function scopedDraftStorageKey(mode: SubmissionMode = editorMode): string | null {
-    return submissionDraftStorageKey({ learnerSub, courseId, taskId: task.id, mode });
-  }
-
-  function removeLegacyDraft(mode: SubmissionMode = editorMode) {
-    const key = legacyDraftStorageKey(mode);
-    window.localStorage.removeItem(key);
-    window.sessionStorage.removeItem(key);
-  }
-
-  function persistPendingDraft() {
-    if (draftPersistTimer !== null) {
-      clearTimeout(draftPersistTimer);
-      draftPersistTimer = null;
-    }
-    if (!browser || !pendingDraftWrite) {
-      return;
-    }
-    const { key, value } = pendingDraftWrite;
-    pendingDraftWrite = null;
-    window.localStorage.removeItem(key);
-    window.sessionStorage.setItem(key, value);
-  }
-
-  /**
-   * Keep keystrokes off synchronous Web Storage while retaining the newest complete draft.
-   * The pending write is flushed before submit, navigation, task changes, and component teardown.
-   */
-  function scheduleDraftPersistence(key: string, value: string) {
-    pendingDraftWrite = { key, value };
-    if (draftPersistTimer !== null) {
-      clearTimeout(draftPersistTimer);
-    }
-    draftPersistTimer = setTimeout(persistPendingDraft, DRAFT_PERSIST_DELAY_MS);
-  }
-
-  function restoreDraft(mode: SubmissionMode = editorMode) {
-    if (!browser || uploadOnly() || mode !== "text") {
-      return;
-    }
-    persistPendingDraft();
-    removeLegacyDraft(mode);
-    const key = scopedDraftStorageKey(mode);
-    if (key) {
-      window.localStorage.removeItem(key);
-    }
-    const storedDraft = key ? window.sessionStorage.getItem(key) : null;
-    const baseline = currentReviewedBaseline();
-    restoredSessionDraft = storedDraft !== null;
-    draftEditedSinceRestore = false;
-    reconciledFeedbackSubmissionId = baseline?.submissionId ?? null;
-    draftText = storedDraft ?? (baseline?.kind === "text" ? baseline.textBody ?? "" : "");
-  }
-
   function setEditorMode(next: SubmissionMode) {
     editorMode = next;
-    if (next === "text") {
-      restoreDraft(next);
-    }
   }
+
+  // A feedback workbench can contain a writable answer editor. Reading-only
+  // previews and finalized workbenches must not hydrate or replay a draft.
+  const draftScopeKey = $derived(
+    browser && learnerSub && (submissionFocused && !reviewPanelOpen || workspaceOnly && reviewPanelOpen && !editingLocked())
+      && (task.kind ?? "native") === "native" && editorMode === "text"
+      ? JSON.stringify([learnerSub, courseId, task.id]) : null
+  );
+  $effect(() => {
+    if (!draftScopeKey) return;
+    return untrack(() => {
+      const scope = { learnerSub, courseId, taskId: task.id, mode: "text" as const };
+      const controller = createTaskDraftPersistence(scope, (state) => {
+        draftView = state;
+        draftText = state.text;
+      });
+      draftController = controller;
+      void controller.load(currentReviewedBaseline()?.textBody ?? "");
+      return () => {
+        controller.destroy();
+        if (draftController === controller) draftController = null;
+      };
+    });
+  });
 
   function uploadTitle(): string {
     if (task.kind === "scratch") {
@@ -578,26 +537,12 @@
   }
 
   function persistCurrentTextDraft() {
-    // Preview cards also unmount during navigation. Only real edits may replace a stored draft.
-    if (!draftEditedSinceRestore) return;
-    if (draftPersistTimer !== null) {
-      clearTimeout(draftPersistTimer);
-      draftPersistTimer = null;
-    }
-    pendingDraftWrite = null;
-    if (!browser || uploadOnly() || editorMode !== "text") {
-      return;
-    }
-    const key = scopedDraftStorageKey("text");
-    if (!key) {
-      return;
-    }
-    window.localStorage.removeItem(key);
-    window.sessionStorage.setItem(key, draftText);
+    draftController?.checkpoint();
+    if (draftController?.state.dirty) void draftController.save();
   }
 
-  function pauseEditing() {
-    persistCurrentTextDraft();
+  async function pauseEditing() {
+    if (draftController && !(await draftController.save())) return;
     onExitSubmissionWorkspace?.();
   }
 
@@ -730,27 +675,13 @@
   }
 
   function updateDraft(value: string) {
-    draftText = value;
-    draftEditedSinceRestore = true;
-    if (!browser || uploadOnly() || editorMode !== "text") {
-      return;
-    }
-    const key = scopedDraftStorageKey("text");
-    if (!key) {
-      return;
-    }
-    scheduleDraftPersistence(key, value);
+    if (draftController) draftController.edit(value);
+    else { fallbackEdited = true; draftText = value; }
   }
 
   onMount(() => {
-    window.addEventListener("pagehide", persistCurrentTextDraft);
-    if (reviewPanelOpen) {
-      void tick().then(scrollToFeedback);
-    }
-    return () => {
-      window.removeEventListener("pagehide", persistCurrentTextDraft);
-      persistCurrentTextDraft();
-    };
+    removeLegacySubmissionDraft({ courseId, taskId: task.id, mode: "text" });
+    if (reviewPanelOpen) void tick().then(scrollToFeedback);
   });
 
   function compactTaskTone(): CompactTaskTone {
@@ -785,9 +716,6 @@
     if (workspaceActive && (!lastSubmissionFocused || workspaceTaskChanged)) {
       const nextMode = preferredEditorMode();
       editorMode = nextMode;
-      if (nextMode === "text") {
-        restoreDraft(nextMode);
-      }
       selectedUploadFile = null;
       hideExistingUpload = false;
       if (uploadInput) {
@@ -800,24 +728,10 @@
   });
 
   $effect(() => {
-    const workspaceActive = submissionFocused || reviewPanelOpen;
     const baseline = currentReviewedBaseline();
-    if (
-      !workspaceActive ||
-      editorMode !== "text" ||
-      baseline?.kind !== "text" ||
-      reconciledFeedbackSubmissionId === baseline.submissionId
-    ) {
-      return;
-    }
-
-    const mayHydrate = !restoredSessionDraft && !draftEditedSinceRestore && pendingDraftWrite === null;
-
-    // Record the submission before changing draft state so this effect reconciles each reviewed version once.
-    reconciledFeedbackSubmissionId = baseline.submissionId;
-    if (mayHydrate) {
-      draftText = baseline.textBody ?? "";
-    }
+    const controller = draftController;
+    if (controller) untrack(() => controller.setBaseline(baseline?.kind === "text" ? baseline.textBody ?? "" : ""));
+    else if (!draftView && !fallbackEdited && baseline?.kind === "text") draftText = baseline.textBody ?? "";
   });
 
   $effect(() => {
@@ -1079,14 +993,25 @@
                         ariaLabel="Deine Antwort"
                         value={draftText}
                         placeholder="Schreibe hier deine Lösung."
-                        disabled={editingLocked()}
+                        disabled={editingLocked() || (draftController !== null && !draftView?.ready)}
                         focusRequest={editorFocusRequest}
                         onInput={updateDraft}
                       />
                     </section>
+                    {#if draftController && draftView}
+                      <div class="workspace-note" role="status" aria-live="polite" aria-atomic="true">
+                        {draftView.message}
+                      </div>
+                      {#if draftView.status === "error" || draftView.status === "blocked"}
+                        <button type="button" class="workspace-top-action" onclick={() => {
+                          if (draftView?.ready && draftView.status !== "blocked") void draftController?.save();
+                          else void draftController?.load(currentReviewedBaseline()?.textBody ?? "");
+                        }}>Erneut versuchen</button>
+                      {/if}
+                    {/if}
                     <div class="learning-submission-editor__actions">
                       {#if !canOfferFinalization() || hasUnreviewedTextChanges()}
-                      <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="feedback" disabled={editingLocked() || !draftText.trim()}>
+                      <button class="workspace-top-action workspace-top-action--accent" name="submission_intent" type="submit" value="feedback" disabled={editingLocked() || (draftController !== null && !draftView?.ready) || !draftText.trim()}>
                         {feedbackActionLabel()}
                       </button>
                       {/if}

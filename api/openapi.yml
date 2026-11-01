@@ -7101,6 +7101,161 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '404': { description: Session not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /api/learning/courses/{course_id}/tasks/{task_id}/draft:
+    parameters:
+      - in: header
+        name: X-Draft-Owner
+        required: false
+        description: >-
+          Optional URI-encoded learner subject expected by an already open editor.
+          A mismatch with the authenticated identity returns 403. Never selects
+          the draft owner; ownership always comes from the authenticated session.
+        schema: { type: string }
+      - { in: path, name: course_id, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: task_id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Learning]
+      summary: Read the learner's private task draft
+      operationId: getLearningTaskDraft
+      security: [{ cookieAuth: [] }]
+      x-permissions:
+        requiredRole: student
+      description: >-
+        Only the authenticated learner may access their own native learning-task
+        draft in an active course with active membership and visible task.
+        Practice tasks are excluded. Drafts do not create submissions or feedback jobs.
+        Empty text is retained and whitespace is preserved. NUL characters are rejected. Last committed write wins.
+        Writes require same-origin Origin/Referer. Database failures return 503.
+      x-security-notes:
+        - "RLS: own student, active course membership and task visibility required."
+        - "CSRF: same-origin required for PUT. All responses are private, no-store."
+      responses:
+        '200':
+          description: The learner's saved draft
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [text_body, updated_at]
+                properties:
+                  text_body: { type: string, maxLength: 65536 }
+                  updated_at: { type: string, format: date-time }
+        '204':
+          description: No saved draft exists for this accessible task
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+        '400':
+          description: Invalid input
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Wrong role or CSRF violation
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Task not accessible or not a supported learning task
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Draft persistence unavailable
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    put:
+      tags: [Learning]
+      summary: Save the learner's private task draft
+      operationId: saveLearningTaskDraft
+      security: [{ cookieAuth: [] }]
+      x-permissions:
+        requiredRole: student
+      description: >-
+        Only the authenticated learner may access their own native learning-task
+        draft in an active course with active membership and visible task.
+        Practice tasks are excluded. Drafts do not create submissions or feedback jobs.
+        Empty text is retained and whitespace is preserved. NUL characters are rejected. Last committed write wins.
+        Writes require same-origin Origin/Referer. Database failures return 503.
+      x-security-notes:
+        - "RLS: own student, active course membership and task visibility required."
+        - "CSRF: same-origin required for PUT. All responses are private, no-store."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text_body]
+              properties:
+                text_body: { type: string, maxLength: 65536 }
+      responses:
+        '200':
+          description: The learner's saved draft
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [text_body, updated_at]
+                properties:
+                  text_body: { type: string, maxLength: 65536 }
+                  updated_at: { type: string, format: date-time }
+        '400':
+          description: Invalid input
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthenticated
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Wrong role or CSRF violation
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Task not accessible or not a supported learning task
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Draft persistence unavailable
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /api/learning/courses/{course_id}/tasks/{task_id}/submissions:
     get:
       tags: [Learning]

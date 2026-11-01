@@ -34,6 +34,10 @@ from backend.web.learning_dialog_providers import (
     LearningDialogProviders,
     create_learning_dialog_providers,
 )
+from backend.web.learning_draft_providers import (
+    LearningDraftProviders,
+    create_learning_draft_providers,
+)
 from backend.web.learning_graph_providers import (
     LearningGraphProviders,
     create_learning_graph_providers,
@@ -97,6 +101,7 @@ def create_app(
     learning_course_providers: LearningCourseProviders | None = None,
     learning_dialog_providers: LearningDialogProviders | None = None,
     learning_graph_providers: LearningGraphProviders | None = None,
+    learning_draft_providers: LearningDraftProviders | None = None,
     learning_h5p_providers: LearningH5PProviders | None = None,
     learning_module_providers: LearningModuleProviders | None = None,
     learning_material_providers: LearningMaterialProviders | None = None,
@@ -128,6 +133,7 @@ def create_app(
     created_app.state.learning_dialog_providers = learning_dialog_providers if learning_dialog_providers is not None else create_learning_dialog_providers()
     created_app.state.learning_upload_intent_providers = learning_upload_intent_providers if learning_upload_intent_providers is not None else create_learning_upload_intent_providers()
     created_app.state.learning_upload_proxy_providers = learning_upload_proxy_providers if learning_upload_proxy_providers is not None else create_learning_upload_proxy_providers()
+    created_app.state.learning_draft_providers = learning_draft_providers if learning_draft_providers is not None else create_learning_draft_providers()
     created_app.state.learning_h5p_providers = learning_h5p_providers if learning_h5p_providers is not None else create_learning_h5p_providers()
     created_app.state.learning_section_providers = learning_section_providers if learning_section_providers is not None else create_learning_section_providers()
     created_app.state.learning_material_providers = learning_material_providers if learning_material_providers is not None else create_learning_material_providers(environment=lambda: runtime.settings.environment)

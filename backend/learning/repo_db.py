@@ -228,6 +228,14 @@ class DBLearningRepo:
         match = re.match(r"^[a-z]+://(?P<u>[^:]+):?[^@]*@", dsn or "")
         return match.group("u") if match else ""
 
+    def read_task_draft(self, student_sub: str, course_id: str, task_id: str) -> dict | None:
+        from backend.learning.repo_task_drafts import access
+        return access(self, student_sub, course_id, task_id)
+
+    def save_task_draft(self, student_sub: str, course_id: str, task_id: str, text_body: str) -> dict:
+        from backend.learning.repo_task_drafts import access
+        return access(self, student_sub, course_id, task_id, text_body)
+
     def _set_current_sub(self, cur, sub: str) -> None:
         cur.execute("select set_config('app.current_sub', %s, true)", (sub,))
 

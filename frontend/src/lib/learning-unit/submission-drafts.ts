@@ -23,3 +23,10 @@ export function submissionDraftStorageKey(scope: SubmissionDraftScope): string |
 export function legacySubmissionDraftStorageKey(scope: Omit<SubmissionDraftScope, "learnerSub">): string {
   return `gustav.learning.submission-draft:${scope.courseId}:${scope.taskId}:${scope.mode}`;
 }
+
+/** Remove obsolete unscoped recovery data, never adopt it for another learner. */
+export function removeLegacySubmissionDraft(scope: Omit<SubmissionDraftScope, "learnerSub">): void {
+  const key = legacySubmissionDraftStorageKey(scope);
+  try { window.sessionStorage.removeItem(key); } catch { /* Optional storage. */ }
+  try { window.localStorage.removeItem(key); } catch { /* Optional storage. */ }
+}

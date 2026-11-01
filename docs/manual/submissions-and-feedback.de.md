@@ -1,7 +1,7 @@
 # Abgaben und Rückmeldung
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-10-23
+Zuletzt geprüft: 2026-11-01
 [English version](submissions-and-feedback.en.md)
 
 ![Formative Rückmeldung im Lernraum](../assets/readme/formative-feedback.jpg)
@@ -19,7 +19,7 @@ GUSTAV trennt formative Rückmeldung von der endgültigen Abgabe. Lernende könn
 
 ## Schritt für Schritt
 
-1. Die lernende Person verfasst eine Antwort oder wählt eine passende Datei aus.
+1. Die lernende Person verfasst eine Antwort oder wählt eine passende Datei aus. Normale Markdown-Antworten werden automatisch als privater Arbeitsentwurf gesichert. „Entwurf gespeichert – noch nicht abgegeben“ bestätigt die Speicherung im Schülerkonto; eine Rückmeldung wird dadurch nicht angefordert.
 2. Mit **„Rückmeldung einholen“** wird die aktuelle Fassung als unveränderlicher Versuch gespeichert und zur Auswertung vorgemerkt.
 3. Während der Verarbeitung zeigt GUSTAV einen laufenden Zustand. Nach Abschluss öffnet sich **„Rückmeldung“**. Die zugehörigen Bewertungen lassen sich darin über **„Kriterien im Detail“** nachvollziehen.
 4. Mit **„Überarbeiten“** geht es zurück zum Texteditor oder Dateifeld. **„Abgeben“** gibt die bereits geprüfte Fassung endgültig ab.
@@ -34,7 +34,7 @@ Bei KI-Dialogen kündigt **„Gespräch → Abschlussaufgabe → Abgabe“** ein
 
 ## So funktioniert es
 
-Jede an den Server gesendete Fassung wird als unveränderlicher Versuch gespeichert. Doppelte Übertragungen werden durch wiederholbare Anfragen abgefangen. Datei-Uploads werden vor der Analyse auf Größe, Typ, Signatur und Aufgabenbindung geprüft.
+Jede ausdrücklich zur Rückmeldung oder endgültigen Abgabe gesendete Fassung wird als unveränderlicher Versuch gespeichert. Doppelte Übertragungen werden durch wiederholbare Anfragen abgefangen. Datei-Uploads werden vor der Analyse auf Größe, Typ, Signatur und Aufgabenbindung geprüft.
 
 Die Verarbeitung läuft im Hintergrund. GUSTAV veröffentlicht erst eine vollständig validierte Auswertung und Rückmeldung. Ein technischer Fehler verändert eine gespeicherte Antwort nicht; die Oberfläche zeigt stattdessen einen bereinigten Fehlerzustand.
 
@@ -42,7 +42,7 @@ KI-Rückmeldung ist formativ. Sie soll zur Überarbeitung anregen und ist weder 
 
 ## Grenzen
 
-- Ein ungesendeter Editorentwurf ist nur im aktuellen Browsertab verfügbar.
+- Nur noch nicht bestätigte Änderungen eines Aufgabenentwurfs liegen im aktuellen Tab. Bestätigte Arbeitsentwürfe werden im Schülerkonto gespeichert.
 - Eine endgültige Abgabe ist nur für die zuletzt zur Rückmeldung gespeicherte, unveränderte Fassung möglich.
 - Teilweise KI-Ergebnisse werden nicht angezeigt. Bei einem Verarbeitungsfehler kann die Rückmeldung fehlen, obwohl die Antwort sicher gespeichert ist.
 - Zulässige Dateiformate und Größen hängen vom Aufgabentyp ab; eine umbenannte unpassende Datei wird nicht allein wegen ihrer Endung akzeptiert.

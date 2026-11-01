@@ -3303,6 +3303,11 @@
   }
 }
 
+.teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--routed .svelte-flow__edge-path {
+  stroke: var(--color-control-border);
+  opacity: 1;
+}
+
 .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--related .svelte-flow__edge-path,
 .teacher-flow-shell .svelte-flow__edge.selected .svelte-flow__edge-path,
 .teacher-flow-shell .svelte-flow__edge.teacher-flow-edge--selected .svelte-flow__edge-path,

@@ -73,7 +73,7 @@ describe("teacher unit graph route contract", () => {
     const source = routeSource();
 
     expect(source).toContain("workspaceForBuild: TeacherUnitWorkspaceView = workspaceState");
-    expect(source).toContain("buildTeacherUnitFlow(workspaceForBuild, selection)");
+    expect(source).toContain("buildTeacherUnitFlow(workspaceForBuild, selection, getModularGeometry)");
     expect(source).toContain('from "$lib/teacher-unit-workspace/view-state"');
     expect(source).toContain("const nextWorkspace = cloneWorkspace(data.workspace)");
     expect(source).toContain("workspaceState = nextWorkspace");

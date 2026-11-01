@@ -1,6 +1,8 @@
 <script lang="ts">
   import { anchorRestoredModule } from "$lib/learning-unit/module-scroll-anchor";
   import { browserUUID } from "$lib/utils/browser-uuid";
+  import { createModularGeometryCache } from "$lib/graph/module-graph-cache";
+  const getModularGeometry = createModularGeometryCache();
   import { createSubmissionPreviewLoader, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import { applyAction } from "$app/forms";
   import { browser } from "$app/environment";
@@ -1610,7 +1612,8 @@
         graphState,
         data.user,
         highlightedLearnerGraphModuleIds(modularWorkspace.openTabs),
-        openModule
+        openModule,
+        getModularGeometry
       );
 
       if (token !== rebuildToken) {

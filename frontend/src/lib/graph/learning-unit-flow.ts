@@ -12,6 +12,7 @@ import type {
   TeacherUnitWorkspaceView
 } from "$lib/types/home";
 import type { SessionBootstrapUser } from "$lib/types/session-bootstrap";
+import type { ModularGeometryCache } from "./module-graph-cache";
 
 export type LearningFlowNodeData = TeacherFlowNodeData & {
   status?: LearningUnitGraphModule["status"];
@@ -101,12 +102,13 @@ export async function buildLearningUnitFlow(
   graph: LearningUnitGraph,
   user: SessionBootstrapUser,
   openModuleIds: string[],
-  onOpenModule: (moduleId: string) => void
+  onOpenModule: (moduleId: string) => void,
+  getGeometry?: ModularGeometryCache
 ): Promise<{ nodes: LearningFlowNode[]; edges: TeacherFlowEdge[] }> {
   const moduleById = new Map(graph.modules.map((module) => [module.id, module]));
   const openModuleIdSet = new Set(openModuleIds);
   const teacherWorkspace = toTeacherWorkspace(graph, user);
-  const flow = await buildTeacherUnitFlow(teacherWorkspace);
+  const flow = await buildTeacherUnitFlow(teacherWorkspace, teacherWorkspace.selection, getGeometry);
 
   const nodes = flow.nodes.map((node) => {
     if (node.data.kind !== "module") {

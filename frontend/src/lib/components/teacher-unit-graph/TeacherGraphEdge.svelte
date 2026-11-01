@@ -1,15 +1,20 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { enhance } from "$app/forms";
   import {
     BaseEdge,
     getSmoothStepPath,
+    useInternalNode,
     type EdgeProps
   } from "@xyflow/svelte";
 
   import type { TeacherFlowEdgeData, SmoothStepPathOptionsLike } from "$lib/graph/teacher-unit-flow";
+  import { routedEdgePath } from "$lib/graph/routed-edge-path";
 
   let {
     id,
+    source,
+    target,
     sourceX,
     sourceY,
     targetX,
@@ -26,8 +31,21 @@
     selected?: boolean;
   } = $props();
 
-  const edgeGeometry = $derived.by(() =>
-    getSmoothStepPath({
+  // Edges are keyed by their source/target pair; changing an endpoint creates
+  // a new edge component, so these subscriptions intentionally stay fixed.
+  const sourceNode = useInternalNode(untrack(() => source));
+  const targetNode = useInternalNode(untrack(() => target));
+  const dragging = $derived(Boolean(sourceNode.current?.dragging || targetNode.current?.dragging));
+  const edgeGeometry = $derived.by(() => {
+    const points = data?.routePoints;
+    // During dragging, live handles keep the preview attached. On drop the
+    // structural layout supplies the complete route again.
+    if (points && !dragging) return routedEdgePath([
+      // Visible handles extend slightly beyond the card border. Preserve the
+      // calculated bends, but terminate at the actual handle boundary.
+      { x: sourceX, y: sourceY }, ...points.slice(1, -1), { x: targetX, y: targetY }
+    ]);
+    return getSmoothStepPath({
       sourceX,
       sourceY,
       targetX,
@@ -36,8 +54,8 @@
       targetPosition,
       borderRadius: pathOptions?.borderRadius ?? 18,
       offset: pathOptions?.offset ?? 0
-    })
-  );
+    });
+  });
 </script>
 
 <BaseEdge path={edgeGeometry[0]} {markerEnd} />

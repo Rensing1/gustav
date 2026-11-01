@@ -1,5 +1,8 @@
 <script lang="ts">
   import { graphAriaLabels } from "$lib/graph/graph-presentation";
+  import { createModularGeometryCache } from "$lib/graph/module-graph-cache";
+  import { modularViewportVersion } from "$lib/graph/module-graph-layout";
+  import { reorderedModuleIds } from "$lib/graph/module-reorder";
   import { enhance } from "$app/forms";
   import { goto, invalidateAll, pushState, replaceState } from "$app/navigation";
   import { page } from "$app/state";
@@ -69,6 +72,9 @@
   let flowNodes = $state.raw<TeacherFlowNode[]>([]);
   let flowEdges = $state.raw<TeacherFlowEdge[]>([]);
   let flowBusy = $state(false);
+  let flowError = $state<string | null>(null);
+  const getModularGeometry = createModularGeometryCache();
+  let moduleLayoutPositions: { id: string; position: { x: number; y: number } }[] = [];
   let graphMessage = $state<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   let workspaceState = $state<TeacherUnitWorkspaceView>(initialWorkspace());
   let localSelection = $state<TeacherUnitWorkspaceSelection>(initialWorkspace().selection);
@@ -542,12 +548,15 @@
   ) {
     const buildSequence = ++flowBuildSequence;
     flowBusy = true;
+    flowError = null;
     try {
-      const layout = await buildTeacherUnitFlow(workspaceForBuild, selection);
+      const layout = await buildTeacherUnitFlow(workspaceForBuild, selection, getModularGeometry);
       if (buildSequence !== flowBuildSequence) {
         return;
       }
       flowNodes = layout.nodes;
+      moduleLayoutPositions = layout.nodes.filter((node) => node.data.kind === "module")
+        .map((node) => ({ id: node.id, position: { ...node.position } }));
       flowEdges = layout.edges.map((edge) => ({
         ...edge,
         data: {
@@ -555,6 +564,8 @@
           enhanceGraphForm
         }
       }));
+    } catch {
+      if (buildSequence === flowBuildSequence) flowError = "Der Lernpfad konnte nicht aufgebaut werden. Bitte versuche es erneut.";
     } finally {
       if (buildSequence === flowBuildSequence) {
         flowBusy = false;
@@ -705,14 +716,6 @@
     return flowNodes.filter((node) => flowNodeData(node).kind === "module");
   }
 
-  function compareNodeTopLeft(left: TeacherFlowNode, right: TeacherFlowNode): number {
-    const byY = left.position.y - right.position.y;
-    if (Math.abs(byY) > 12) {
-      return byY;
-    }
-    return left.position.x - right.position.x;
-  }
-
   function sameIds(left: string[], right: string[]): boolean {
     return left.length === right.length && left.every((value, index) => value === right[index]);
   }
@@ -775,18 +778,12 @@
       return;
     }
 
-    const nextIds = moduleNodes()
-      .filter((node) => {
-        const nodeData = flowNodeData(node);
-        return nodeData.phaseId === targetPhaseId;
-      })
-      .sort(compareNodeTopLeft)
-      .map((node) => node.id);
-
     const currentIds =
       modularPhases()
         .find((phase) => phase.id === targetPhaseId)
         ?.modules.map((module) => module.id) ?? [];
+    const nextIds = reorderedModuleIds(currentIds, nodeId, movedNode.position,
+      moduleLayoutPositions.filter((node) => currentIds.includes(node.id)));
 
     if (!nextIds.length) {
       console.warn("Module reorder aborted: empty target payload", { nodeId, targetPhaseId });
@@ -1182,12 +1179,17 @@
       onnodedragstop={handleNodeDragStop}
     >
       <GraphViewportControls
-        storageKey={`gustav:teacher-graph:${workspaceState.unit.id}:viewport`}
+        storageKey={`gustav:teacher-graph:${workspaceState.unit.id}:viewport${workspaceState.graph.kind === "modular" ? `:${modularViewportVersion}` : ""}`}
         initialNodeId={initialGraphFocusNodeId()}
         onControllerReady={registerGraphViewportController}
       />
 
-      {#if graphMessage}
+      {#if flowError}
+        <Panel position="top-center">
+          <p class="graph-viewport-error" role="alert">{flowError}</p>
+          <button class="workspace-link-action nodrag nopan" type="button" onclick={() => rebuildFlow()}>Erneut versuchen</button>
+        </Panel>
+      {:else if graphMessage}
         <Panel position="top-center">
           <StatusMessage
             tone={graphMessage.tone}

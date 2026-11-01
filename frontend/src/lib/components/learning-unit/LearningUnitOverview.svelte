@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { learnerGraphFocusId } from "$lib/learning-unit/graph-selection";
+  import { modularViewportVersion } from "$lib/graph/module-graph-layout";
   import { SvelteFlow } from "@xyflow/svelte";
   import { fitGraphToScreen, graphAriaLabels } from "$lib/graph/graph-presentation";
   import "@xyflow/svelte/dist/style.css";
@@ -78,7 +79,7 @@
           nodesConnectable={false}
         >
           <GraphViewportControls
-            storageKey={`gustav:learner-graph:${graph.unit.id}:viewport`}
+            storageKey={`gustav:learner-graph:${graph.unit.id}:viewport:${modularViewportVersion}`}
             initialNodeId={learnerGraphFocusId(nodes, compact)}
             showInteractionToggle={false}
           />

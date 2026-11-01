@@ -3,7 +3,7 @@ import { apiHeaders, expectApiOk } from "./support/api";
 import { currentUserSub, login } from "./support/auth";
 import { newBrowserContext } from "./support/browser-context";
 import { e2eEmail, e2ePassword, webBase } from "./support/e2e-env";
-import { expect, test, type Page } from "./support/feature-test";
+import { expect, test, type Page, type Browser, type TestInfo } from "./support/feature-test";
 import { ensureLearnerUser, ensureTeacherUser } from "./support/keycloak";
 import { expectNoViewportOverflow } from "./support/layout-sanity";
 import { createFileMaterial } from "./support/seed-data";
@@ -42,7 +42,46 @@ async function camera(page: Page) {
   });
 }
 
-test("@feature-acceptance both roles share graph geometry and controls while learner permissions stay restricted", async ({ browser }, testInfo) => {
+/** Inspect painted curves as well as the abstract orthogonal layout. */
+async function expectClearPaintedPaths(page: Page) {
+  await expect.poll(() => page.locator(".svelte-flow").evaluate((root) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d")!;
+    const luminance = () => {
+      const [r, g, b] = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3)
+        .map((value) => { value /= 255; return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const obstacles = Array.from(root.querySelectorAll(".teacher-flow-unit-node, .teacher-flow-phase-band__label"))
+      .map((element) => element.getBoundingClientRect());
+    for (const path of root.querySelectorAll<SVGPathElement>(".svelte-flow__edge-path")) {
+      const style = getComputedStyle(path);
+      context.globalAlpha = 1;
+      context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-bg-base");
+      context.fillRect(0, 0, 1, 1);
+      const background = luminance();
+      context.globalAlpha = Number(style.opacity);
+      context.fillStyle = style.stroke;
+      context.fillRect(0, 0, 1, 1);
+      const foreground = luminance();
+      const ratio = (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+      if (ratio < 3) return `path contrast below 3:1 (${ratio})`;
+      const matrix = path.getScreenCTM();
+      if (!matrix) return "unmeasured path";
+      const length = path.getTotalLength();
+      for (let distance = 0; distance <= length; distance += 6) {
+        const local = path.getPointAtLength(distance);
+        const point = new DOMPoint(local.x, local.y).matrixTransform(matrix);
+        if (obstacles.some((box) => point.x > box.left + 3 && point.x < box.right - 3
+          && point.y > box.top + 3 && point.y < box.bottom - 3)) return "path crosses a card or label";
+      }
+    }
+    return null;
+  })).toBeNull();
+}
+
+test("@feature-acceptance shared graph keeps horizontal paths, wrapping, role permissions and editor state", async ({ browser }, testInfo) => {
   test.setTimeout(120_000);
   const teacherEmail = e2eEmail("teacher");
   const learnerEmail = e2eEmail("learner");
@@ -102,6 +141,11 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     await expect(learner.locator(".svelte-flow__node")).toHaveCount(9);
     await expect.poll(async () => (await geometry(learner)).edges.length).toBe(7);
     await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+    const branch = (await geometry(teacher)).nodes;
+    const start = branch.find((node) => node.id === modules[0].id)!;
+    for (const index of [1, 2]) expect(branch.find((node) => node.id === modules[index].id)!.x).toBeGreaterThan(start.x);
+    await expectClearPaintedPaths(teacher);
+    await expectClearPaintedPaths(learner);
     const startModule = learner.getByRole("button", { name: /Modul 01 Start/ });
     await expect(startModule).toBeInViewport({ ratio: 0.999 });
     for (const page of [teacher, learner]) {
@@ -281,4 +325,139 @@ test("@feature-acceptance both roles share graph geometry and controls while lea
     await learnerContext.close();
     await teacherContext.close();
   }
+  await verifyRowsAndDrops(browser, testInfo);
 });
+
+async function verifyRowsAndDrops(browser: Browser, testInfo: TestInfo) {
+  await ensureTeacherUser(e2eEmail("teacher"), e2ePassword);
+  await ensureLearnerUser(e2eEmail("learner"), e2ePassword);
+  const teacherContext = await newBrowserContext(browser);
+  const learnerContext = await newBrowserContext(browser);
+  try {
+    const teacher = await teacherContext.newPage(), learner = await learnerContext.newPage();
+    await login(teacher, e2eEmail("teacher"), e2ePassword);
+    await login(learner, e2eEmail("learner"), e2ePassword);
+    const unit = await create(teacher, "/api/teaching/units", { title: `Zeilenlayout ${Date.now()}`, unit_type: "modular" });
+    const base = `/api/teaching/units/${unit.id}`;
+    const phasesResponse = await teacher.request.get(`${webBase}${base}/phases`);
+    await expectApiOk(phasesResponse);
+    const firstPhase = (await phasesResponse.json())[0];
+    const freePhase = await create(teacher, `${base}/phases`, { title: "Freie Auswahl" });
+    const chain: { id: string }[] = [], free: { id: string }[] = [];
+    for (let i = 0; i < 8; i++) chain.push(await create(teacher, `${base}/modules`, { title: `Schritt ${i + 1}`, phase_id: firstPhase.id }));
+    for (let i = 1; i < chain.length; i++) await create(teacher, `${base}/modules/edges`, { from_module_id: chain[i - 1].id, to_module_id: chain[i].id });
+    for (let i = 0; i < 5; i++) free.push(await create(teacher, `${base}/modules`, { title: `Freies Modul ${i + 1}`, phase_id: freePhase.id }));
+    const targetResponse = await teacher.request.get(`${webBase}${base}/modules/${chain[0].id}/content-target`);
+    await expectApiOk(targetResponse);
+    await create(teacher, `${base}/sections/${(await targetResponse.json()).section_id}/materials`, { title: "Zeilenmaterial", body_md: "Dieser Inhalt stammt aus dem echten Modul." });
+    const course = await create(teacher, "/api/teaching/courses", { title: `Zeilenkurs ${Date.now()}`, subject: "Testfach", grade_level: "Jahrgangsübergreifend", school_year_start: new Date().getFullYear() });
+    await create(teacher, `/api/teaching/courses/${course.id}/modules`, { unit_id: unit.id });
+    await create(teacher, `/api/teaching/courses/${course.id}/members`, { student_sub: await currentUserSub(learner) });
+    await teacher.setViewportSize({ width: 1440, height: 900 });
+    await teacher.goto(`/teaching/units/${unit.id}`);
+    await learner.goto(`/learning/courses/${course.id}/units/${unit.id}`);
+    for (const page of [teacher, learner]) await expect(page.locator(".svelte-flow__node")).toHaveCount(15);
+    await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+    const initial = await geometry(teacher);
+    const cards = chain.map((module) => initial.nodes.find((node) => node.id === module.id)!);
+    expect(new Set(cards.slice(0, 4).map((node) => node.y)).size).toBe(1);
+    expect(new Set(cards.slice(4).map((node) => node.y)).size).toBe(1);
+    expect(cards[1].x).toBeGreaterThan(cards[0].x);
+    expect(cards[4].y).toBeGreaterThan(cards[0].y);
+    expect(cards[4].x).toBeCloseTo(cards[0].x, 0);
+    expect(initial.edges).toHaveLength(7);
+
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      for (const theme of ["light", "dark"]) {
+        for (const [role, page] of [["teacher", teacher], ["learner", learner]] as const) {
+          await page.setViewportSize({ width, height: width === 768 ? 1024 : 900 });
+          await setAppTheme(page, theme);
+          await page.getByRole("button", { name: "Gesamtansicht", exact: true }).click();
+          await expectClearPaintedPaths(page);
+          await expectNoViewportOverflow(page);
+          await page.locator(".teacher-flow-shell").screenshot({ path: testInfo.outputPath(`rows-${role}-${width}-${theme}.png`), animations: "disabled" });
+        }
+        await expect.poll(() => geometry(learner)).toEqual(await geometry(teacher));
+      }
+    }
+
+    await teacher.setViewportSize({ width: 1440, height: 900 });
+    await teacher.goto(`/teaching/units/${unit.id}?phase=${freePhase.id}`);
+    const handle = (id: string) => teacher.locator(`.svelte-flow__node[data-id="${id}"] .teacher-flow-unit-node__drag-handle`);
+    const storedIds = async (phaseId: string) => {
+      const response = await teacher.request.get(`${webBase}${base}/modules/graph`);
+      await expectApiOk(response);
+      const graph = await response.json();
+      return graph.modules.filter((module: { phase_id: string }) => module.phase_id === phaseId)
+        .sort((a: { position_in_phase: number }, b: { position_in_phase: number }) => a.position_in_phase - b.position_in_phase)
+        .map((module: { id: string }) => module.id);
+    };
+    const drag = async (from: string, dx: number, dy = 0) => {
+      await handle(from).hover();
+      const node = teacher.locator(`.svelte-flow__node[data-id="${from}"]`);
+      // A navigation may still be restoring the camera. Read the pointer's
+      // start position only after the target has stopped moving.
+      await expect.poll(() => node.evaluate(async (element) => {
+        const before = element.getBoundingClientRect();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const after = element.getBoundingClientRect();
+        return Math.abs(before.x - after.x) + Math.abs(before.y - after.y);
+      })).toBeLessThan(0.1);
+      const box = (await handle(from).boundingBox())!;
+      const initialBox = (await node.boundingBox())!;
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      const hit = await teacher.evaluate(({ x, y }) => {
+        const element = document.elementFromPoint(x, y);
+        return { handle: Boolean(element?.closest(".teacher-flow-unit-node__drag-handle")), tag: element?.tagName, classes: element?.getAttribute("class"), text: element?.textContent?.slice(0, 80) };
+      }, { x, y });
+      expect(hit.handle, JSON.stringify(hit)).toBe(true);
+      await teacher.mouse.move(x, y);
+      await teacher.mouse.down();
+      await teacher.mouse.move(x + dx, y + dy, { steps: 10 });
+      if (Math.abs(dx) > 12) await expect.poll(async () => Math.abs((await node.boundingBox())!.x - initialBox.x)).toBeGreaterThan(Math.abs(dx) / 2);
+      await teacher.mouse.up();
+    };
+    await expect(handle(free[0].id)).toBeInViewport();
+    await drag(free[0].id, 2, 1);
+    expect(await storedIds(freePhase.id)).toEqual(free.map((module) => module.id));
+    const a = (await teacher.locator(`.svelte-flow__node[data-id="${free[0].id}"]`).boundingBox())!;
+    const b = (await teacher.locator(`.svelte-flow__node[data-id="${free[1].id}"]`).boundingBox())!;
+    const [accepted] = await Promise.all([
+      teacher.waitForResponse((response) => response.url().endsWith(`/graph/modules`) && response.request().method() === "POST"),
+      drag(free[0].id, b.x - a.x + b.width * 0.65)
+    ]);
+    expect(accepted.ok()).toBe(true);
+    await expect.poll(() => storedIds(freePhase.id)).toEqual([free[1].id, free[0].id, ...free.slice(2).map((module) => module.id)]);
+
+    await teacher.goto(`/teaching/units/${unit.id}?phase=${firstPhase.id}`);
+    await expect(handle(chain[0].id)).toBeInViewport();
+    const first = (await teacher.locator(`.svelte-flow__node[data-id="${chain[0].id}"]`).boundingBox())!;
+    const second = (await teacher.locator(`.svelte-flow__node[data-id="${chain[1].id}"]`).boundingBox())!;
+    const [rejected] = await Promise.all([
+      teacher.waitForResponse((response) => response.url().endsWith(`/graph/modules`) && response.request().method() === "POST"),
+      drag(chain[0].id, second.x - first.x + second.width * 0.65)
+    ]);
+    expect(rejected.status()).toBe(400);
+    await expect(teacher.getByText("Verschieben blockiert: Abhängigkeiten zuerst entfernen.", { exact: true })).toBeVisible();
+    expect(await storedIds(firstPhase.id)).toEqual(chain.map((module) => module.id));
+    await expect.poll(async () => (await geometry(teacher)).nodes.filter((node) => chain.some((m) => m.id === node.id)))
+      .toEqual(initial.nodes.filter((node) => chain.some((m) => m.id === node.id)));
+    await expectClearPaintedPaths(teacher);
+
+    await learner.setViewportSize({ width: 390, height: 844 });
+    await learner.getByRole("button", { name: "Auswahl fokussieren", exact: true }).click();
+    await expect.poll(() => learner.locator(".svelte-flow__viewport").evaluate(async (element) => {
+      const before = getComputedStyle(element).transform;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return getComputedStyle(element).transform === before;
+    })).toBe(true);
+    const beforeOpen = await camera(learner);
+    await learner.getByRole("button", { name: /Modul 01 Schritt 1/ }).click();
+    await expect(learner.getByText("Dieser Inhalt stammt aus dem echten Modul.")).toBeVisible();
+    await learner.goBack();
+    await expect.poll(() => camera(learner)).toEqual(beforeOpen);
+  } finally {
+    await learnerContext.close();
+    await teacherContext.close();
+  }
+}

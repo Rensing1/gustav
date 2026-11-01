@@ -529,6 +529,9 @@ verwendet. Fehler lassen Dialog und Graphzustand unverändert sichtbar.
 Lehrkraft- und Schüleransicht verwenden für dieselbe modulare Lerneinheit dieselbe Graphgeometrie: Phasenreihenfolge, relative Knotenpositionen, Knotengrößen und Anschlusspositionen stimmen überein. Statusfarben, Fortschritt, Auswahl und Bearbeitungsaktionen sind dagegen rollenbezogen. Die gemeinsame Steuerung trennt einen lesbaren Startfokus von der bewussten `Gesamtansicht`; diese darf auch auf schmalen Bildschirmen unter die Lesevergrößerung herauszoomen. Nach dem einmaligen Startfokus setzen Datenaktualisierungen den gewählten Ausschnitt nicht automatisch zurück. Lernende erhalten keinen Schalter zum Aktivieren der Knotenbearbeitung.
 
 - Graph bleibt Phasen-zentriert
+- Phasen folgen untereinander; Lernwege innerhalb einer Zeile verlaufen von links nach rechts. Vier Modulspalten bilden die normale Zeilenkapazität. Weitere Zeilen beginnen wieder links und bleiben durch eindeutige Pfeilverbindungen verbunden.
+- Ein Umbruch ist nur an einer Grenze mit genau einer überquerenden Abhängigkeit zulässig. Verzweigungen bleiben bis zur Zusammenführung zusammen und dürfen die normale Zeilenbreite überschreiten. Unverbundene Einzelmodule bilden ein Raster ohne Pfeile; getrennte Lernwege bleiben räumlich getrennt.
+- Bildschirmgröße, Rolle, Auswahl und Lernfortschritt ändern die Karte nicht. Phasen teilen ihre Breite; die Inhalte bleiben phasenweise zentriert. Verbindungsspuren werden bei der Größenberechnung berücksichtigt und dürfen keine Modulkarten oder Phasenbeschriftungen durchqueren.
 - Knoten verwenden die gemeinsamen 8-px-Radien, ruhige Flächen und dezente Konturen; Titel dominieren gegenüber Nummern und Bestandszahlen
 - aktive Auswahl ist orange markiert; Bearbeitungszustand und Tastaturfokus bleiben davon unterscheidbar
 - gesperrte Zustände sind reduziert und monochrom

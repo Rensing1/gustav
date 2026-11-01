@@ -1,7 +1,7 @@
 # Learning units and releases
 
 GUSTAV-Version: 0.0.4
-Last verified: 2026-08-20
+Last verified: 2026-11-01
 [Deutsche Version](learning-units-and-releases.de.md)
 
 ![Modular learning unit in the teacher view](../assets/readme/teacher-authoring.jpg)
@@ -34,6 +34,10 @@ Assigned learning units appear in the active course. In modular units, learners 
 Practice modules can be repeated and are never marked as completed. Their special behavior is described in [Practice modules](practice-modules.en.md).
 
 ## How it works
+
+The module graph automatically arranges learning paths from left to right. After normally four columns, the next row starts again on the left. Row breaks occur only between closed branching areas; larger branching areas can remain wider. Unconnected modules form a grid without arrows. Teachers and learners see the same arrangement on every screen size. Panning and zooming change only the visible area.
+
+Dragging inserts only the moved module relative to its target into the stored order. Connections remain prerequisites: invalid orders are rejected and the valid arrangement is restored. Simply releasing a module does not change its order.
 
 A learning unit remains the property of its author. The course assignment points to this reusable unit; it does not create an independent copy. Changes to the unit therefore take effect in every course to which it is assigned.
 

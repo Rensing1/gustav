@@ -84,6 +84,7 @@ def test_build_and_online_audit_gates_are_explicit_and_narrow() -> None:
     frontend_package = _json("frontend/package.json")
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     flow_source = (REPO_ROOT / "frontend/src/lib/graph/teacher-unit-flow.ts").read_text(encoding="utf-8")
+    worker_source = (REPO_ROOT / "frontend/src/lib/graph/elk-layout.ts").read_text(encoding="utf-8")
     layout_source = (REPO_ROOT / "frontend/src/routes/+layout.svelte").read_text(encoding="utf-8")
 
     assert frontend_package["scripts"]["build"] == "svelte-kit sync && bash tooling/build-with-warning-gate.sh"
@@ -94,7 +95,8 @@ def test_build_and_online_audit_gates_are_explicit_and_narrow() -> None:
     assert "UNUSED_EXTERNAL_IMPORT" in (REPO_ROOT / "frontend/tooling/build-warning-gate.ts").read_text(encoding="utf-8")
     assert "backend.tools.dependency_audit" in _make_target_body(makefile, "dependency-audit")
     assert "$(MAKE) dependency-audit" not in _make_target_body(makefile, "verify")
-    assert 'elkjs/lib/elk-api.js' in flow_source
-    assert 'elkjs/lib/elk-worker.min.js?url' in flow_source
-    assert "elk.bundled.js" not in flow_source
+    assert 'from "./elk-layout"' in flow_source
+    assert 'elkjs/lib/elk-api.js' in worker_source
+    assert 'elkjs/lib/elk-worker.min.js?url' in worker_source
+    assert "elk.bundled.js" not in flow_source + worker_source
     assert '/latin-' in layout_source

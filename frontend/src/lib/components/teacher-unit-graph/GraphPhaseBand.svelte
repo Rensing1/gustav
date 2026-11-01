@@ -40,7 +40,7 @@
 
 </script>
 
-<div class:teacher-flow-phase-band--selected={selected} class="teacher-flow-phase-band">
+<div class:teacher-flow-phase-band--selected={data.phaseSelected ?? selected} class="teacher-flow-phase-band" style:padding-inline-start={data.headerInset ? `${data.headerInset}px` : undefined}>
   {#if phaseHref()}
     <a class="teacher-flow-phase-band__label nodrag nopan" href={phaseHref() ?? undefined} onclick={selectPhase}>
       <span class="teacher-flow-phase-band__kicker">{editorialPhaseKicker(data.kicker)}</span>

@@ -2,6 +2,8 @@
 
 ## 2026-11-01
 
+- feat(graph): Gemeinsamer Modulgraph mit horizontalen Lernwegen, Viererzeilen und strukturellen Umbrüchen vor und nach Verzweigungen. Freie Module bilden ein Raster; berechnete Verbindungspfade umgehen Karten und Phasenüberschriften. Rollen und Geräte teilen dieselbe Karte, Geometrie wird bei unveränderter Struktur wiederverwendet. Drag & Drop bewegt ausschließlich das gezogene Modul; ungültige Reihenfolgen werden wiederhergestellt.
+
 - fix(learning): Materialtitel in der bestehenden Aufgaben-Seitenleiste klappen ihre Inhalte direkt unter dem Eintrag auf oder zu. Text-, Datei-, H5P- und Dialogbearbeitung bleiben erhalten; mehrere Materialien sind gleichzeitig lesbar. Ohne gespeicherten Zustand bleiben sie zunächst geschlossen. Die Großansicht ist eine gesonderte Aktion. Bestehende Materialviewer einschließlich Simulationen werden wiederverwendet.
 
 ## 2026-10-31

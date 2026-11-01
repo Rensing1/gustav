@@ -28,6 +28,8 @@ Der Lernraum ist die zentrale Arbeitsfläche der Lernenden. Er hält Kurs, Lernw
 
 ## Lernendensicht
 
+Phasen stehen untereinander; innerhalb einer Phase führen die Pfeile von links nach rechts. Lange Lernwege laufen normalerweise nach vier Modulspalten in der nächsten Zeile links weiter. Verzweigungen bleiben bis zur Zusammenführung zusammen und können deshalb breiter werden. Module ohne Verbindungen stehen als freie Auswahl in einem Raster. Lehrkräfte und Lernende sehen dieselbe räumliche Karte; Farben und Aktionen zeigen den jeweiligen Arbeitsstand beziehungsweise die Berechtigungen.
+
 Lernende sehen nur eigene aktive Kurse, zugeordnete Lerneinheiten und zugängliche Inhalte. Im modularen Graphen bleiben auch gesperrte Lernschritte als Orientierung sichtbar, können aber nicht geöffnet werden. Offene und erledigte Knoten zeigen den individuellen Lernstand, nicht den Stand der ganzen Klasse.
 
 Materialien, Aufgabe, eigene frühere Abgaben und Rückmeldungen werden kontextbezogen dargestellt. Interne technische IDs, Musterlösungen, Kriterien und Lehrkraft-Kontext werden nicht als versteckte Hilfen ausgeliefert.

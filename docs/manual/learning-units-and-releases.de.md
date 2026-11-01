@@ -1,7 +1,7 @@
 # Lerneinheiten und Freigaben
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-08-20
+Zuletzt geprüft: 2026-11-01
 [English version](learning-units-and-releases.en.md)
 
 ![Modulare Lerneinheit in der Lehrkraftansicht](../assets/readme/teacher-authoring.jpg)
@@ -34,6 +34,10 @@ Zugeordnete Lerneinheiten erscheinen im aktiven Kurs. Bei modularen Einheiten se
 Übungsmodule sind wiederholbar und werden nie als erledigt markiert. Ihr besonderes Verhalten wird in [Übungsmodule](practice-modules.de.md) beschrieben.
 
 ## So funktioniert es
+
+Der Modulgraph ordnet Lernwege automatisch von links nach rechts an. Nach normalerweise vier Spalten beginnt die nächste Zeile wieder links. Ein Umbruch erfolgt nur zwischen abgeschlossenen Verzweigungen; größere zusammenhängende Verzweigungen dürfen breiter bleiben. Unverbundene Module stehen ohne Pfeile im Raster. Die Karte ist bei Lehrkräften und Lernenden sowie auf allen Bildschirmgrößen gleich angeordnet. Verschieben und Vergrößern ändern nur den Ausschnitt.
+
+Beim Ziehen eines Moduls wird ausschließlich dieses Modul relativ zum Zielmodul in die gespeicherte Reihenfolge eingefügt. Verbindungen bleiben Voraussetzungen: Eine unzulässige Reihenfolge wird abgelehnt und die gültige Anordnung wiederhergestellt. Bloßes Loslassen verändert die Reihenfolge nicht.
 
 Eine Lerneinheit bleibt Eigentum ihrer Autorin oder ihres Autors. Die Kurszuordnung verweist auf diese wiederverwendbare Einheit; sie erzeugt keine unabhängige Kopie. Änderungen an der Einheit wirken deshalb in allen Kursen, denen sie zugeordnet ist.
 

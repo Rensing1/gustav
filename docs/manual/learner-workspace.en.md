@@ -28,6 +28,8 @@ The learning workspace is the central workspace for learners. It keeps the cours
 
 ## Learner view
 
+Phases are stacked vertically, with arrows leading from left to right within each phase. Long paths normally continue at the left of a new row after four module columns. Branches stay together until they join and may therefore be wider. Unconnected modules form a grid of independent choices. Teachers and learners share the same spatial map; status colors and actions reflect their respective progress and permissions.
+
 Learners see only their own active courses, assigned learning units, and accessible content. In the modular graph, locked learning steps remain visible for orientation but cannot be opened. Open and completed nodes show the individual's learning progress, not that of the entire class.
 
 Materials, a task, the learner's own previous submissions, and feedback are displayed in context. Internal technical IDs, sample solutions, criteria, and teacher context are not delivered as hidden aids.

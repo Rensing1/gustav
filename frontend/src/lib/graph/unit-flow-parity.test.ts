@@ -6,6 +6,12 @@ import type { SessionBootstrapUser } from "$lib/types/session-bootstrap";
 import { buildLearningUnitFlow } from "./learning-unit-flow";
 import { buildTeacherUnitFlow, type TeacherFlowEdge, type TeacherFlowNode } from "./teacher-unit-flow";
 
+vi.mock("./elk-layout", async () => {
+  const { default: ELK } = await import("elkjs/lib/elk.bundled.js");
+  const elk = new ELK();
+  return { getElk: async () => elk };
+});
+
 const user = { sub: "test-learner", roles: ["student"], name: "Test" } as SessionBootstrapUser;
 
 function graphFixture(): LearningUnitGraph {
@@ -49,13 +55,21 @@ function geometry(flow: { nodes: TeacherFlowNode[]; edges: TeacherFlowEdge[] }) 
   return {
     nodes: flow.nodes.map(({ id, position, width, height, parentId }) => ({ id, position, width, height, parentId }))
       .sort((a, b) => a.id.localeCompare(b.id)),
-    edges: flow.edges.map(({ id, source, target, sourceHandle, targetHandle, pathOptions }) => ({
-      id, source, target, sourceHandle, targetHandle, pathOptions
+    edges: flow.edges.map(({ id, source, target, sourceHandle, targetHandle, data }) => ({
+      id, source, target, sourceHandle, targetHandle, routePoints: data?.routePoints
     })).sort((a, b) => a.id.localeCompare(b.id))
   };
 }
 
 describe("one graph geometry for both roles", () => {
+  it("highlights phase selection without selecting the parent drag group", async () => {
+    const workspace = teacherFixture(graphFixture());
+    const phase = workspace.graph.phases![0];
+    const flow = await buildTeacherUnitFlow(workspace, { kind: "phase", phase } as TeacherUnitWorkspaceView["selection"]);
+    const parent = flow.nodes.find((node) => node.id === `phase:${phase.id}`)!;
+    expect(parent.selected).toBe(false);
+    expect(parent.data.phaseSelected).toBe(true);
+  });
   it("explains locked prerequisites without inventing missing conditions", async () => {
     const graph = graphFixture();
     const locked = graph.modules.find((module) => module.id === "d")!;

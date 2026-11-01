@@ -105,6 +105,7 @@ class FeedbackAdapterProtocol(Protocol):
         conversation_context: dict,
         criteria: Sequence[str],
         instruction_md: str,
+        teacher_context_md: str | None = None,
     ) -> FeedbackResult:
         ...
 

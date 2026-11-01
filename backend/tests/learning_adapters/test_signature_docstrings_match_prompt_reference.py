@@ -116,11 +116,48 @@ def test_signature_docstrings_match_reference(
         assert doc == docs_blocks[signature_name]
 
 
-def test_feedback_synthesis_contract_avoids_unverifiable_technical_suggestions(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Feedback prose should not invent concrete network values from weak evidence."""
+def test_feedback_synthesis_contract_preserves_assessment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The approved synthesis must preserve the assessment and its requirements."""
     _install_fake_dspy(monkeypatch)
     with _load_signature_module("backend.learning.adapters.dspy.signatures") as sigs:
         doc = inspect.getdoc(getattr(sigs, "FeedbackSynthesisSignature")) or ""
 
-    assert "Nenne konkrete technische Werte" in doc
-    assert "nur, wenn sie eindeutig" in doc
+    assert "Geben Sie die Befunde der Auswertung zutreffend wieder" in doc
+    assert "Führen Sie keine zusätzlichen Anforderungen ein und verändern Sie die Bewertung nicht." in doc
+
+
+def test_repair_reference_matches_executed_suffix():
+    """Documentation must describe the suffix actually sent on a repair call."""
+    from backend.learning.adapters.dspy.programs import _run_analysis_repair
+
+    calls = []
+    _run_analysis_repair(
+        runner=lambda **kwargs: calls.append(kwargs),
+        criteria=["Begründen"], text_md="Antwort", repair_reason="{repair_reason}",
+    )
+    suffix = calls[0]["teacher_instructions_md"]
+    reference = Path("docs/references/LLM-Prompts.md").read_text(encoding="utf-8")
+    assert f"```text\n{suffix}\n```" in reference
+
+
+def test_signature_fields_keep_output_and_teacher_guidance_contract(monkeypatch):
+    """Keep technical constraints outside the verbatim pedagogical main prompts."""
+    _install_fake_dspy(monkeypatch)
+    fake = sys.modules["dspy"]
+    fake.InputField = lambda **kwargs: kwargs
+    fake.OutputField = lambda **kwargs: kwargs
+    with _load_signature_module("backend.learning.adapters.dspy.signatures") as sigs:
+        for name in (
+            "FeedbackAnalysisSignature", "VisualFeedbackAnalysisSignature",
+            "FeedbackSynthesisSignature", "VisualFeedbackSynthesisSignature",
+            "FeedbackNoCriteriaSignature", "VisualFeedbackNoCriteriaSignature",
+        ):
+            cls = getattr(sigs, name)
+            context = cls.teacher_context_md["desc"]
+            assert "Schwerpunkt, Länge und Aufbau" in context
+            assert "Bewertungsmaßstab, Sie-Form und Schutzregeln" in context
+            if "Analysis" in name:
+                result = cls.criteria_results["desc"]
+                assert "Genau ein Ergebnis je Eingangskriterium in identischer Reihenfolge" in result
+                assert "ganze Zahl 0–10" in result
+                assert "nicht leere Begründung" in result

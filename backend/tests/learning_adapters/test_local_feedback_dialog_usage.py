@@ -9,6 +9,26 @@ from backend.learning.adapters.dspy import dialog_assessment_program
 from backend.learning.adapters.ports import FeedbackResult, FeedbackTransientError, TokenUsageEvent
 
 
+@pytest.mark.parametrize("teacher_context", [None, "Interner Qualitätsanker"])
+def test_dialog_adapter_passes_teacher_context_to_program(monkeypatch, teacher_context):
+    adapter = local_feedback._LocalFeedbackAdapter()
+    monkeypatch.setattr(adapter, "_get_text_analysis_lm", lambda: None)
+    monkeypatch.setattr(local_feedback, "capture_dspy_usage", lambda operation, **kwargs: (operation(), []))
+    calls = []
+
+    def analyze(**kwargs):
+        calls.append(kwargs)
+        return FeedbackResult(feedback_md="Sie begründen Ihre Position schlüssig.", analysis_json={})
+
+    monkeypatch.setattr(dialog_assessment_program, "analyze_dialog", analyze)
+    result = adapter.analyze_dialog(
+        student_performance={"messages": []}, conversation_context={"assistant_messages": []},
+        criteria=[], instruction_md="Begründen Sie.", teacher_context_md=teacher_context,
+    )
+    assert calls[0]["teacher_context_md"] == teacher_context
+    assert result.analysis_json == {}
+
+
 def test_dialog_assessment_captures_provider_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = local_feedback._LocalFeedbackAdapter()
     adapter._text_model = "openai/mistral-small-latest"

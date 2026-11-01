@@ -436,8 +436,15 @@ class _LocalFeedbackAdapter:
         conversation_context: dict,
         criteria: Sequence[str],
         instruction_md: str,
+        teacher_context_md: str | None = None,
     ):
-        """Assess learner contributions separately from AI conversation context."""
+        """Assess authorized learner contributions with separate internal context.
+
+        The worker supplies the task instruction, ordered criteria and optional
+        teacher context after loading the authorized task. Keep both teacher
+        guidance and AI conversation context separate from learner evidence;
+        preserve provider usage and the existing technical error classification.
+        """
 
         try:
             from backend.learning.adapters.dspy.dialog_assessment_program import analyze_dialog
@@ -448,6 +455,7 @@ class _LocalFeedbackAdapter:
                     conversation_context=conversation_context,
                     criteria=criteria,
                     instruction_md=instruction_md,
+                    teacher_context_md=teacher_context_md,
                     lm=self._get_text_analysis_lm(),
                 ),
                 model=self._text_model,

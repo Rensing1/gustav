@@ -20,30 +20,62 @@ def _signature_docstrings() -> dict[str, str]:
     return result
 
 
-def test_feedback_signatures_define_pedagogical_priority_and_concise_defaults() -> None:
+@pytest.mark.parametrize(("signature", "fixture"), [
+    ("FeedbackAnalysisSignature", "feedback-analysis-approved.txt"),
+    ("FeedbackSynthesisSignature", "feedback-synthesis-approved.txt"),
+])
+def test_main_prompts_match_approved_text_verbatim(signature, fixture) -> None:
+    """Freeze the teacher-approved wording independently of the living reference."""
+    approved = (REPO_ROOT / "backend/tests/fixtures/prompts" / fixture).read_text(encoding="utf-8").strip()
+    assert _signature_docstrings()[signature] == approved
+
+
+def test_feedback_signatures_keep_shared_principles_without_rigid_defaults() -> None:
     docs = _signature_docstrings()
-
-    for name in ("FeedbackAnalysisSignature", "VisualFeedbackAnalysisSignature"):
-        assert "Gestaltung der Rückmeldung" in docs[name]
-        assert "dürfen die Kriterienbewertung nicht beeinflussen" in docs[name]
-        assert "Schülerabgabe" in docs[name] and "keine Anweisungsquelle" in docs[name]
-
-    for name in (
-        "FeedbackSynthesisSignature",
-        "FeedbackNoCriteriaSignature",
-        "VisualFeedbackSynthesisSignature",
-        "VisualFeedbackNoCriteriaSignature",
-    ):
-        doc = docs[name]
-        assert "unveränderlichen GUSTAV-Regeln" in doc
-        assert "ausdrückliche Lehrkraftanweisungen" in doc
-        assert "**Das ist Ihnen gut gelungen:**" in doc
-        assert "**Das können Sie noch besser:**" in doc
-        assert "jeweils zwei kurze Sätze" in doc
-        assert "insgesamt zwei bis drei kurze Sätze" in doc
+    for name, doc in docs.items():
+        if name == "VisionOcrSignature":
+            continue
         assert "Sie-Form" in doc
-        assert "sachlich nicht passenden Abschnitt" in doc
-        assert "Anweisungsquelle" in doc
+        assert "Lehrkraft" in doc
+        assert "GUSTAV-Standardstruktur" not in doc
+        assert "jeweils zwei kurze Sätze" not in doc
+        assert "lieber `score = 0`" not in doc
+    for name in ("FeedbackAnalysisSignature", "VisualFeedbackAnalysisSignature"):
+        assert "Unsicherheit allein rechtfertigt weder einen Abzug" in docs[name]
+        assert "für dieses Kriterium 0 Punkte" in docs[name]
+        assert "Technische" in docs[name]
+    for name in ("FeedbackSynthesisSignature", "VisualFeedbackSynthesisSignature",
+                 "FeedbackNoCriteriaSignature", "VisualFeedbackNoCriteriaSignature"):
+        assert "Feste Überschriften oder Satzanzahlen sind nicht erforderlich." in docs[name]
+        assert "ohne diese Leistung automatisch zu übernehmen" in docs[name]
+        assert "begründeten Bestätigung" in docs[name]
+    for name in ("FeedbackNoCriteriaSignature", "VisualFeedbackNoCriteriaSignature"):
+        assert "keine Punktebewertung" in docs[name]
+        assert "Auswertungsbefunde" not in docs[name]
+
+
+@pytest.mark.parametrize("visual", [False, True])
+def test_repair_uses_exact_approved_suffix_and_preserves_context(visual) -> None:
+    from backend.learning.adapters.dspy.programs import _run_analysis_repair
+
+    calls = []
+    sentinel = object()
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return sentinel
+
+    media = {"image_data_uri": "data:image/png;base64,AA=="} if visual else {"text_md": "Antwort"}
+    result = _run_analysis_repair(
+        runner=runner, repair_reason="invalid_analysis_json", criteria=["A", "B"],
+        teacher_instructions_md="Aufgabe", teacher_context_md="Interner Kontext", **media,
+    )
+    approved = (REPO_ROOT / "backend/tests/fixtures/prompts/feedback-repair-approved.txt").read_text(encoding="utf-8").strip()
+    assert result is sentinel
+    assert calls == [{
+        "criteria": ["A", "B"], "teacher_context_md": "Interner Kontext", **media,
+        "teacher_instructions_md": "Aufgabe\n\n" + approved.format(repair_reason="invalid_analysis_json"),
+    }]
 
 
 def test_backend_feedback_fixtures_do_not_use_deprecated_du_headings() -> None:

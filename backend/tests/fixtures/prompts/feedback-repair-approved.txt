@@ -1,0 +1,5 @@
+REPAIR RULES:
+- The previous analysis was invalid: {repair_reason}.
+- Return exactly one result object per criterion.
+- Keep the same order as the input criteria.
+- Do not add extra objects or meta commentary.

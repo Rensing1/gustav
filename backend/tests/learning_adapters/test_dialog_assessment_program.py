@@ -112,3 +112,39 @@ def test_empty_feedback_is_rejected(monkeypatch):
     _predict(monkeypatch, [], feedback_md=" ")
     with pytest.raises(RuntimeError, match="^empty_feedback_md$"):
         _analyze(criteria=[])
+
+
+@pytest.mark.parametrize("teacher_context", [None, "Fachwissen und zulässige Varianten; Rückmeldung knapp halten."])
+@pytest.mark.parametrize("criteria", [[], ["Begründen"]])
+def test_dialog_forwards_internal_context_separately(monkeypatch, teacher_context, criteria):
+    calls = _predict(monkeypatch, [
+        {"score": 10, "explanation_md": "Sie begründen Ihre Position schlüssig."}
+        for _ in criteria
+    ])
+    result = program.analyze_dialog(
+        student_performance={"messages": [{"text": "Meine Begründung"}]},
+        conversation_context={"assistant_messages": ["Eine Rückfrage"]},
+        criteria=criteria,
+        instruction_md="Begründen Sie.",
+        teacher_context_md=teacher_context,
+    )
+    assert calls[0]["teacher_context_md"] == teacher_context
+    assert "teacher_context_md" not in calls[0]["student_performance"]
+    assert "teacher_context_md" not in calls[0]["conversation_context"]
+    assert "teacher_context_md" in program.DialogAssessmentSignature.input_fields
+    assert "teacher_context_md" not in result.analysis_json
+    if not criteria:
+        assert result.analysis_json == {}
+
+
+def test_dialog_prompt_preserves_performance_boundaries():
+    prompt = program.DialogAssessmentSignature.instructions
+    for required in (
+        "Übernommene Satzanfänge sind Hilfen und kein eigenständiger Leistungsbeleg",
+        "niemals als Schülerleistung", "Abschlussantwort", "0 Punkte",
+        "Unsicherheit allein rechtfertigt weder einen Abzug",
+        "Feste Überschriften oder Satzanzahlen sind nicht erforderlich",
+        "ohne diese Leistung automatisch zu übernehmen",
+        "Bei leerer Kriterienliste", "Sie-Form",
+    ):
+        assert required in prompt

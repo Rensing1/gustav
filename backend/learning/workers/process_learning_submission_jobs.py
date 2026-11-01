@@ -501,6 +501,7 @@ def _process_job(
                 conversation_context=dict(payload.get("conversation_context") or {}),
                 criteria=list(payload.get("criteria") or []),
                 instruction_md=str(instruction_md or ""),
+                teacher_context_md=teacher_context_md,
             )
         except FeedbackPermanentError as exc:
             _set_current_sub(conn, student_sub)

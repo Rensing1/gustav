@@ -76,7 +76,6 @@ def _run_analysis_repair(
         "- Return exactly one result object per criterion.\n"
         "- Keep the same order as the input criteria.\n"
         "- Do not add extra objects or meta commentary.\n"
-        "- If uncertain, keep the structure valid and use score 0.\n"
     )
     kwargs = {
         "criteria": criteria,

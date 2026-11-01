@@ -137,6 +137,10 @@ async def test_print_endpoints_require_the_authoring_teacher(
 ) -> None:
     store = install_session_store(monkeypatch, main)
     teaching_routes.set_repo(teaching_routes._Repo())
+    from unittest.mock import Mock
+    print_routes = importlib.import_module("backend.web.routes.teaching_unit_prints")
+    renderer = Mock()
+    monkeypatch.setattr(print_routes, "PDF_RENDERER", renderer)
     owner = store.create(sub="print-owner", roles=["teacher"], name="Ada", ttl_seconds=60)
     student = store.create(sub="print-student", roles=["student"], name="Ben", ttl_seconds=60)
     other_teacher = store.create(sub="print-other", roles=["teacher"], name="Cem", ttl_seconds=60)
@@ -170,6 +174,7 @@ async def test_print_endpoints_require_the_authoring_teacher(
     assert student_list.status_code == 403
     assert foreign_list.status_code == 403
     assert foreign_export.status_code == 403
+    renderer.render.assert_not_called()
 
 
 async def test_printable_pdf_requires_non_empty_same_origin_author_selection(

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import type { LearningMaterial } from "$lib/types/learning";
 
   let {
@@ -77,15 +77,11 @@
     <div class="learning-work-item__body" id={bodyId}>
       <div class="learning-material-card__body-inner">
         {#if material.kind === "markdown"}
-          <div class="markdown-prose learning-material-prose">
-            {@html renderMarkdown(material.body_md)}
-          </div>
+          <MarkdownContent class="markdown-prose learning-material-prose" source={material.body_md} />
         {:else if material.kind === "simulation"}
           <section class="learning-material-simulation">
             {#if material.body_md?.trim()}
-              <div class="markdown-prose learning-material-prose learning-material-simulation__orientation">
-                {@html renderMarkdown(material.body_md)}
-              </div>
+              <MarkdownContent class="markdown-prose learning-material-prose learning-material-simulation__orientation" source={material.body_md} />
             {/if}
             {#if material.simulation_url}
               {#if simulationRunning}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
 
   let { kind, speaker = "", markdown, current = false, usedStarter = false }: {
     kind: "ai" | "student";
@@ -17,7 +17,7 @@
 >
   <p class="dialog-message__speaker">{kind === "ai" ? speaker : "Du"}</p>
   <div class="dialog-message__bubble markdown-prose">
-    {@html renderMarkdown(markdown)}
+    <MarkdownContent source={markdown} style="display: contents" />
     {#if kind === "student" && usedStarter}<small class="dialog-message__help">Hilfestellung: Satzanfang verwendet</small>{/if}
   </div>
 </article>

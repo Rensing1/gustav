@@ -11,6 +11,8 @@ Security model:
 """
 from __future__ import annotations
 
+import re
+
 import bleach
 from markdown_it import MarkdownIt
 
@@ -42,6 +44,7 @@ _ALLOWED_TAGS = [
 
 _ALLOWED_ATTRIBUTES = {
     "a": ["href", "title"],
+    "code": ["class"],
 }
 
 _ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
@@ -60,6 +63,20 @@ _MD = MarkdownIt(
         "breaks": True,
     },
 ).enable("table")
+
+
+def _explicit_break(state, silent: bool) -> bool:
+    """Recognize legacy <br> spelling without touching code or enabling raw HTML."""
+    match = re.match(r"<br\s*/?>", state.src[state.pos:], flags=re.IGNORECASE)
+    if not match:
+        return False
+    if not silent:
+        state.push("hardbreak", "br", 0)
+    state.pos += len(match.group(0))
+    return True
+
+
+_MD.inline.ruler.before("text", "explicit_break", _explicit_break)
 
 
 def render_markdown_safe(src: str) -> str:

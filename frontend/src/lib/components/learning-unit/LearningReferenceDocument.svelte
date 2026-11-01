@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
   import LearningDialogTranscriptDocument from "$lib/components/learning-unit/LearningDialogTranscriptDocument.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
@@ -166,9 +166,7 @@
   {#if expanded || readerMode}
     <div class="learner-reference-document__body" id={bodyId}>
       {#if material?.kind === "markdown"}
-        <div class="learner-reference-document__prose markdown-prose">
-          {@html renderMarkdown(material.body_md ?? "")}
-        </div>
+        <MarkdownContent class="learner-reference-document__prose markdown-prose" source={material.body_md ?? ""} />
       {:else if material?.kind === "simulation"}
         <LearningMaterialCard {material} embedded domId={`reference-simulation-${safeKey}`} />
       {:else if material?.kind === "file"}
@@ -225,9 +223,7 @@
             />
           {/if}
           {#if submission.text_body}
-            <div class="learner-reference-document__prose markdown-prose">
-              {@html renderMarkdown(submission.text_body)}
-            </div>
+            <MarkdownContent class="learner-reference-document__prose markdown-prose" source={submission.text_body} />
           {/if}
           {#if file && isImageMime(file.mime)}
             {#if imageFailed(file.url)}
@@ -259,9 +255,7 @@
           {#if submission.feedback_md}
             <details class="learner-reference-document__response">
               <summary>Rückmeldung</summary>
-              <div class="learner-reference-document__prose markdown-prose">
-                {@html renderMarkdown(submission.feedback_md)}
-              </div>
+              <MarkdownContent class="learner-reference-document__prose markdown-prose" source={submission.feedback_md} />
               {#if submission.analysis_json?.criteria_results?.length}
                 <LearningCriteriaDetails criteria={submission.analysis_json.criteria_results} />
               {/if}
@@ -276,9 +270,7 @@
                 <section class="learner-reference-document__older-attempt">
                   <strong>Versuch {older.attempt_nr} · {submissionDate(older)}</strong>
                   {#if older.text_body}
-                    <div class="learner-reference-document__prose markdown-prose">
-                      {@html renderMarkdown(older.text_body)}
-                    </div>
+                    <MarkdownContent class="learner-reference-document__prose markdown-prose" source={older.text_body} />
                   {/if}
                 </section>
               {/each}

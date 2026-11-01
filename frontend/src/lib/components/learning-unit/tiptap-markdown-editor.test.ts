@@ -77,3 +77,18 @@ describe("Tiptap Markdown adapter", () => {
     editor.destroy();
   });
 });
+
+
+it("preserves Mermaid language, indentation and HTML labels after an edit and reopen", () => {
+  const source = "sequenceDiagram\n    participant A as <Alice>\n\n    A->>B: Grüße\n\tB-->>A: Hallo";
+  const host = document.createElement("div");
+  const options = { element: host, content: "```mermaid\n" + source + "\n```", placeholder: "Material", onUpdate: vi.fn() };
+  const editor = createTiptapMarkdownEditor(options);
+  editor.setMarkdown(options.content.replace("Hallo", "Antwort"));
+  const saved = editor.getMarkdown();
+  editor.destroy();
+  const reopened = createTiptapMarkdownEditor({ ...options, content: saved });
+  expect(host.querySelector("pre code")?.textContent).toBe(source.replace("Hallo", "Antwort"));
+  expect(reopened.getMarkdown()).toContain("```mermaid");
+  reopened.destroy();
+});

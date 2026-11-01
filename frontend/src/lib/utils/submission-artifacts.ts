@@ -1,4 +1,3 @@
-import { renderMarkdown } from "$lib/utils/markdown";
 import { FILIUS_FLS_MIME, MAKECODE_HEX_MIME, SCRATCH_SB3_MIME } from "$lib/utils/submission-mime-types";
 import type { LearningSubmission } from "$lib/types/learning";
 
@@ -15,13 +14,13 @@ export type SubmissionArtifactView =
     }
   | {
       kind: "scratch";
-      html: string;
+      markdown: string;
       downloadUrl: string | null;
       fileSummary: string;
     }
   | {
       kind: "filius";
-      html: string;
+      markdown: string;
       downloadUrl: string | null;
       fileSummary: string;
     };
@@ -91,7 +90,7 @@ function renderScratchEvidence(markdown: string): string | null {
     return null;
   }
   const withoutSchemaHeading = normalized.replace(/^# scratch\.evidence\.v2\s*\r?\n+/u, "");
-  return renderMarkdown(withoutSchemaHeading);
+  return withoutSchemaHeading;
 }
 
 function renderFiliusEvidence(markdown: string): string | null {
@@ -100,7 +99,7 @@ function renderFiliusEvidence(markdown: string): string | null {
     return null;
   }
   const withoutSchemaHeading = normalized.replace(/^# filius\.evidence\.v1\s*\r?\n+/u, "");
-  return renderMarkdown(withoutSchemaHeading);
+  return withoutSchemaHeading;
 }
 
 export function buildSubmissionArtifactView(submission: LearningSubmission): SubmissionArtifactView | null {
@@ -129,26 +128,26 @@ export function buildSubmissionArtifactView(submission: LearningSubmission): Sub
   }
 
   if (file.mime === SCRATCH_SB3_MIME) {
-    const html = renderScratchEvidence(markdown);
-    if (!html) {
+    const markdownSource = renderScratchEvidence(markdown);
+    if (!markdownSource) {
       return null;
     }
     return {
       kind: "scratch",
-      html,
+      markdown: markdownSource,
       downloadUrl,
       fileSummary
     };
   }
 
   if (file.mime === FILIUS_FLS_MIME) {
-    const html = renderFiliusEvidence(markdown);
-    if (!html) {
+    const markdownSource = renderFiliusEvidence(markdown);
+    if (!markdownSource) {
       return null;
     }
     return {
       kind: "filius",
-      html,
+      markdown: markdownSource,
       downloadUrl,
       fileSummary
     };

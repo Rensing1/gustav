@@ -4,7 +4,7 @@
   import LearningCriteriaDetails from "./LearningCriteriaDetails.svelte";
   import LearningSubmissionArtifactView from "./LearningSubmissionArtifactView.svelte";
   import LearningDialogTranscriptDocument from "./LearningDialogTranscriptDocument.svelte";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { submissionPreviewText, type SubmissionPreviewState } from "$lib/learning-unit/submission-preview";
   import { h5pCompletionReached } from "$lib/learning-unit/task-completion";
@@ -128,7 +128,7 @@
           <StatusMessage tone="error" title="Rückmeldung konnte nicht erstellt werden" description="Deine gespeicherte Bearbeitung bleibt erhalten." />
         {/if}
         {#if submission.feedback_md}
-          <div class="markdown-prose">{@html renderMarkdown(submission.feedback_md)}</div>
+          <MarkdownContent class="markdown-prose" source={submission.feedback_md} />
         {/if}
         {#if submission.analysis_json?.criteria_results?.length}
           <LearningCriteriaDetails label="Kriterien ansehen" criteria={submission.analysis_json.criteria_results} />
@@ -167,7 +167,7 @@
               <a class="workspace-link-action" href={file.url} target="_blank" rel="noreferrer">Datei öffnen</a>
             {/if}
           {:else if submission.text_body}
-            <div class="markdown-prose">{@html renderMarkdown(submission.text_body)}</div>
+            <MarkdownContent class="markdown-prose" source={submission.text_body} />
           {:else if submission.kind === "h5p"}
             <p>{h5pScoreText()}</p>
           {/if}
@@ -181,7 +181,7 @@
               {#if submission.feedback_md}
                 <details class="learning-response-panel" open={feedbackOpen}>
                   <summary>Rückmeldung</summary>
-                  <div class="learning-response-panel__body markdown-prose">{@html renderMarkdown(submission.feedback_md)}</div>
+                  <MarkdownContent class="learning-response-panel__body markdown-prose" source={submission.feedback_md} />
                 </details>
               {/if}
               {#if submission.analysis_json?.criteria_results?.length}

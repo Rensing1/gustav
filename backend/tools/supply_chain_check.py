@@ -39,6 +39,8 @@ ALLOWED_LICENSES = {
 }
 
 NODE_LICENSE_OVERRIDES = {
+    # khroma 2.1.0 ships an MIT `license` file but omits the manifest field.
+    ("diagram-renderer", "khroma"): "MIT",
     ("h5p-service", "busboy"): "MIT",
     ("h5p-service", "esprima"): "BSD-2-Clause",
     ("h5p-service", "prelude-ls"): "MIT",
@@ -173,8 +175,9 @@ def _node_inventory(workspace: str, lockfile: Path) -> list[dict[str, Any]]:
 def build_inventory() -> dict[str, Any]:
     frontend = _node_inventory("frontend", REPO_ROOT / "frontend/package-lock.json")
     h5p = _node_inventory("h5p-service", REPO_ROOT / "h5p-service/package-lock.json")
+    diagrams = _node_inventory("diagram-renderer", REPO_ROOT / "diagram-renderer/package-lock.json")
     python, python_manifests = _python_inventory()
-    entries = [*python, *frontend, *h5p]
+    entries = [*python, *frontend, *h5p, *diagrams]
     review_required = [
         item
         for item in entries
@@ -186,6 +189,7 @@ def build_inventory() -> dict[str, Any]:
             *(path.relative_to(REPO_ROOT).as_posix() for path in python_manifests),
             "frontend/package-lock.json",
             "h5p-service/package-lock.json",
+            "diagram-renderer/package-lock.json",
         ],
         "policy": {
             "mode": "offline-lockfile-and-installed-metadata",
@@ -198,7 +202,7 @@ def build_inventory() -> dict[str, Any]:
         "summary": {
             "total_entries": len(entries),
             "python_entries": len(python),
-            "node_entries": len(frontend) + len(h5p),
+            "node_entries": len(frontend) + len(h5p) + len(diagrams),
             "review_required_entries": len(review_required),
         },
         "entries": entries,

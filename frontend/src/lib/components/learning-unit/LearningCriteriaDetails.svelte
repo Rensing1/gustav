@@ -4,7 +4,7 @@
     type CriterionLevel,
     type LearningCriterionResult
   } from "$lib/learning-unit/criterion-level";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
 
   let {
     criteria,
@@ -43,9 +43,7 @@
             <span class={`learning-criterion__level ${levelClass[level]}`}>{level}</span>
           </summary>
           {#if criterion.explanation_md}
-            <div class="learning-criterion__explanation markdown-prose">
-              {@html renderMarkdown(criterion.explanation_md)}
-            </div>
+            <MarkdownContent class="learning-criterion__explanation markdown-prose" source={criterion.explanation_md} />
           {/if}
         </details>
       </li>

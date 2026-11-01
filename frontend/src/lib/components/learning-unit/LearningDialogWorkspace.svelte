@@ -8,7 +8,7 @@
   import LearnerTaskSplitDivider from "$lib/components/learning-unit/LearnerTaskSplitDivider.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import type { LearningSubmission, LearningTask, SubmissionHistoryLoadState } from "$lib/types/learning";
 
   type DialogTurn = {
@@ -483,7 +483,7 @@
                 <h3 id="dialog-closing-title">{session.dialog.closing_prompt_md ? "Zum Abschluss" : "Gespräch abgeben"}</h3>
               </header>
               {#if session.dialog.closing_prompt_md}
-                <div class="dialog-closing__prompt markdown-prose" id="dialog-closing-prompt">{@html renderMarkdown(session.dialog.closing_prompt_md)}</div>
+                <MarkdownContent class="dialog-closing__prompt markdown-prose" id="dialog-closing-prompt" source={session.dialog.closing_prompt_md} />
                 <label class="workspace-field"><span>Deine Antwort</span><textarea aria-describedby="dialog-closing-prompt" bind:value={closingAnswer} maxlength="2000" rows="4"></textarea></label>
               {:else}
                 <p class="workspace-note">Mit der Abgabe wird der Dialog endgültig abgeschlossen und ein Versuch verbraucht.</p>

@@ -200,6 +200,7 @@ Der H5P-Service ist ein isolierter Driver. Browserzugriff erhält kurzlebige, zw
 - `backend/learning/` – Learning Use Cases, Practice, Worker und KI-Adapter;
 - `backend/storage/` – Storage-Ports und Adapter;
 - `h5p-service/` – isolierter H5P-Service;
+- `diagram-renderer/` – gemeinsamer interner Mermaid-Renderer für Browser und PDF;
 - `api/openapi.yml` – öffentlicher API-Vertrag;
 - `supabase/migrations/` – versioniertes Datenbankschema;
 - `reverse-proxy/` – Caddy-Konfiguration;
@@ -215,3 +216,14 @@ Der H5P-Service ist ein isolierter Driver. Browserzugriff erhält kurzlebige, zw
 - `make docker-validate` prüft Compose-, Proxy- und Image-Verträge bei Infrastrukturänderungen.
 
 Weitere Nachweise stehen unter `docs/harness/` und `docs/tests/e2e_howto.md`.
+
+
+### Markdown und Mermaid
+
+Die gemeinsame Svelte-Komponente `MarkdownContent` verwendet den synchronen Markdown-Renderer mit deaktiviertem rohem HTML. Code wird vor der Darstellung nicht durch Zeichenkettenfilter verändert. Nur ausdrücklich als `mermaid` markierte Codeblöcke werden als Diagramme angefragt. Eine kleine Token-Aufbereitung erhält dabei die Struktur verschachtelter Listen. Die Ausgabe erfolgt deklarativ als PNG mit zugänglichem Quelltext. Quelltextänderungen und Themewechsel brechen veraltete Browseranfragen ab. Tiptap bearbeitet weiterhin Markdown und benötigt keine Diagrammvorschau.
+
+Browser und PDF verwenden dieselbe Python-Anbindung und denselben internen Dienst `diagram-renderer`. `POST /api/markdown/diagrams` nimmt ausschließlich Quelltexte authentifizierter Lehrkräfte und Schüler entgegen; Rollen- und Same-Origin-Prüfung erfolgen vor dem Rendern. Der Endpunkt liest keine gespeicherten Inhalte. Batchgröße, Antwortgröße und Parallelität sind begrenzt; Antworten sind privat und werden nicht gespeichert. Mermaid ist ausschließlich im Dienst installiert, ohne Anpassungen am Frontend-Build.
+
+Die PDF-Erzeugung übergibt Diagrammtexte des bereits autorisierten Druckdokuments gesammelt an diese Anbindung. Sie prüft PNG-Format, Bildgröße und Ausgabelimit. Erst danach startet der bestehende isolierte WeasyPrint-Prozess mit den vorbereiteten In-Memory-Assets; er benötigt weiterhin keine Netzwerkverbindung. Das Zeitbudget umfasst beide Schritte. Syntax-/Größenfehler erscheinen mit Hinweis und Quelltext im PDF; technische Fehler liefern die vorhandenen privaten PDF-Fehlerantworten.
+
+Der Diagrammdienst verwendet die exakt gepinnte Mermaid-Vollversion mit allen nativen Diagrammtypen und einer restriktiven Konfiguration. Sein gepinntes offizielles Puppeteer-Basisimage liefert den Browser; Node wird aus dem gepflegten Node-24-Image übernommen. Der Dienst hat keine veröffentlichten Ports, Datenbankverbindung, Secrets oder dauerhafte Inhaltsablage. Er ist mit dem Backend über ein eigenes internes Netz verbunden, arbeitet als unprivilegierter Benutzer mit schreibgeschütztem Dateisystem und begrenztem Arbeitsspeicher, Prozesszahl sowie Parallelität. Chromium verwendet hier die Containerisolierung als Grenze (`--no-sandbox`); das ist eine bewusste Eigenschaft dieses dedizierten Dienstes. Browseranfragen werden zusätzlich vollständig blockiert. Abbruch und Zeitüberschreitung schließen den Browser und erzwingen bei Bedarf das Ende seiner Prozessgruppe.

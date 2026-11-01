@@ -1,6 +1,6 @@
 <script lang="ts">
   import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import type { LearningSubmission } from "$lib/types/learning";
 
   let {
@@ -30,9 +30,7 @@
       <summary>Rückmeldung</summary>
       <div class="learning-response-panel__body learning-feedback-response">
         {#if submission.feedback_md}
-          <div class="learning-feedback-response__copy markdown-prose">
-            {@html renderMarkdown(submission.feedback_md)}
-          </div>
+          <MarkdownContent class="learning-feedback-response__copy markdown-prose" source={submission.feedback_md} />
         {/if}
         {#if hasEvaluation()}
           <LearningCriteriaDetails
@@ -48,9 +46,7 @@
     <summary>Meine Abgabe</summary>
     <div class="learning-response-panel__body">
       {#if submission.text_body}
-        <div class="markdown-prose">
-          {@html renderMarkdown(submission.text_body)}
-        </div>
+        <MarkdownContent class="markdown-prose" source={submission.text_body} />
       {:else}
         <p>{fileSummary()}</p>
       {/if}

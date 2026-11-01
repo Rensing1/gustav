@@ -10897,10 +10897,76 @@ paths:
         '404': { description: Unit not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { $ref: '#/components/responses/TeachingRepositoryUnavailable503' }
 
+  /api/markdown/diagrams:
+    post:
+      tags: [Markdown]
+      summary: Render a private batch of Mermaid definitions as PNG images
+      description: >-
+        Accepts submitted diagram source only; no stored content is read or persisted.
+        Requires an authenticated teacher or student and a same-origin browser request.
+        At most 100 definitions and 200000 source characters in total are accepted.
+        Syntax and diagram-size errors are returned per definition; technical renderer
+        failures fail the batch. All native types of the pinned Mermaid release are supported.
+      operationId: renderMarkdownDiagrams
+      security: [{ cookieAuth: [] }]
+      x-security-notes:
+        - "CSRF: Same-origin Origin or Referer required."
+        - "Private, no-store. No source, images, or parser diagnostics may be logged."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sources]
+              properties:
+                sources:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: string, maxLength: 50000 }
+                theme: { type: string, enum: [light, dark], default: light }
+      responses:
+        '200':
+          description: Ordered results, one per submitted definition (including duplicates)
+          headers:
+            Cache-Control:
+              schema: { type: string, example: 'private, no-store' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [diagrams]
+                properties:
+                  diagrams:
+                    type: array
+                    items:
+                      oneOf:
+                        - type: object
+                          required: [png, width, height]
+                          properties:
+                            png: { type: string, format: byte, description: Base64 encoded PNG }
+                            width: { type: integer, minimum: 1, description: Logical display width in CSS pixels }
+                            height: { type: integer, minimum: 1, description: Logical display height in CSS pixels }
+                        - type: object
+                          required: [error]
+                          properties:
+                            error: { type: string, enum: [invalid_diagram, diagram_too_large] }
+        '400': { description: Invalid batch or theme, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized401' }
+        '403': { description: Role or same-origin check failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '413': { description: Source or generated output exceeds the batch limit, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: Diagram renderer unavailable or timed out, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
   /api/teaching/units/{unit_id}/printable-pdf:
     post:
       tags: [Teaching]
       summary: Generate a transient printable PDF of selected learning-unit content
+      description: >-
+        Explicit mermaid fences are rendered as diagrams using an internal offline renderer.
+        Invalid or oversized diagrams retain formatted source with an explanatory notice.
+        Technical diagram-renderer failures use the existing 503 PDF error response.
       operationId: createTeachingUnitPrintablePdf
       security:
         - cookieAuth: []

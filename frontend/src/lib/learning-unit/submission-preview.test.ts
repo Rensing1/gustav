@@ -114,5 +114,6 @@ it("builds plain readable previews from the same safe markdown grammar", () => {
   const text = submissionPreviewText("## **Eingabe**\n\n[Quelle](https://example.com) und `Code`<br>Ausgabe<script>alert(1)</script>");
   expect(text).toContain("Eingabe");
   expect(text).toContain("Quelle und Code");
-  expect(text).not.toMatch(/<|\*\*|https:|alert|##/);
+  expect(text).not.toMatch(/\*\*|https:|##/);
+  expect(text).toContain("<script>alert(1)</script>");
 });

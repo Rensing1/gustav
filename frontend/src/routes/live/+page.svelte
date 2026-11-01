@@ -9,7 +9,7 @@
   import type { LiveDetailSubmission, LiveDialogTranscript, LiveSummaryPayload, LiveUnitDashboardView } from "$lib/types/home";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import { handleBrowserAuthRecovery } from "$lib/utils/browser-auth-recovery";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import {
     buildDashboardViewModel,
     buildLiveDeltaPath,
@@ -674,9 +674,7 @@
                     <p class="learning-task-submission-summary__meta live-panel-summary__meta">
                       Abgabe: {formatSubmissionTimestamp(selectedSubmission.created_at)}
                     </p>
-                    <div class="markdown-prose live-panel-summary__instruction">
-                      {@html renderMarkdown(selectedSubmission.instruction_md)}
-                    </div>
+                    <MarkdownContent class="markdown-prose live-panel-summary__instruction" source={selectedSubmission.instruction_md} />
                   </div>
                 </header>
 
@@ -718,23 +716,23 @@
                         <div class="live-dialog-transcript">
                           <article class="live-dialog-message live-dialog-message--ai">
                             <strong>{selectedSubmission.dialog.dialog.partner_name}</strong>
-                            <div class="markdown-prose">{@html renderMarkdown(selectedSubmission.dialog.dialog.opening_message_md)}</div>
+                            <MarkdownContent class="markdown-prose" source={selectedSubmission.dialog.dialog.opening_message_md} />
                           </article>
                           {#each selectedSubmission.dialog.turns as turn}
                             <article class="live-dialog-message live-dialog-message--student">
                               <strong>Schülerbeitrag {turn.round_nr}</strong>
-                              <div class="markdown-prose">{@html renderMarkdown(turn.student_message_md)}</div>
+                              <MarkdownContent class="markdown-prose" source={turn.student_message_md} />
                               {#if turn.used_sentence_starter_md}<small>Mit Satzanfang-Hilfe: {turn.used_sentence_starter_md}</small>{/if}
                             </article>
                             <article class="live-dialog-message live-dialog-message--ai">
                               <strong>{selectedSubmission.dialog.dialog.partner_name}</strong>
-                              <div class="markdown-prose">{@html renderMarkdown(turn.assistant_reply_md)}</div>
+                              <MarkdownContent class="markdown-prose" source={turn.assistant_reply_md} />
                             </article>
                           {/each}
                           {#if selectedSubmission.dialog.closing_answer_md}
                             <article class="live-dialog-message live-dialog-message--closing">
                               <strong>Abschlussantwort</strong>
-                              <div class="markdown-prose">{@html renderMarkdown(selectedSubmission.dialog.closing_answer_md)}</div>
+                              <MarkdownContent class="markdown-prose" source={selectedSubmission.dialog.closing_answer_md} />
                             </article>
                           {/if}
                         </div>
@@ -743,9 +741,7 @@
                       {:else if isSubmissionSchemaPayload(selectedSubmission.text_body)}
                         <pre class="learning-task-submission-summary__plain">{stripSubmissionSchemaHeader(selectedSubmission.text_body)}</pre>
                       {:else if selectedSubmission.text_body}
-                        <div class="markdown-prose">
-                          {@html renderMarkdown(stripSubmissionSchemaHeader(selectedSubmission.text_body))}
-                        </div>
+                        <MarkdownContent class="markdown-prose" source={stripSubmissionSchemaHeader(selectedSubmission.text_body)} />
                       {:else if selectedFile?.mime?.startsWith("image/")}
                         <div class="learning-task-submission-summary__asset">
                           <img alt="Abgabevorschau" class="learning-task-submission-summary__image" src={selectedFile.url} />
@@ -774,9 +770,7 @@
                   {:else if activePanelTab === "feedback"}
                     <section class="live-panel-block">
                       {#if selectedSubmission.feedback_md}
-                        <div class="markdown-prose">
-                          {@html renderMarkdown(selectedSubmission.feedback_md)}
-                        </div>
+                        <MarkdownContent class="markdown-prose" source={selectedSubmission.feedback_md} />
                       {:else}
                         <p class="learning-task-submission-summary__plain">Es liegt noch keine Rückmeldung vor.</p>
                       {/if}
@@ -792,9 +786,7 @@
                                 : {criterion.score}/{criterion.max_score ?? 10}
                               {/if}
                               {#if criterion.explanation_md}
-                                <div class="markdown-prose">
-                                  {@html renderMarkdown(criterion.explanation_md)}
-                                </div>
+                                <MarkdownContent class="markdown-prose" source={criterion.explanation_md} />
                               {/if}
                             </li>
                           {/each}
@@ -815,9 +807,7 @@
               <section class="live-panel-empty">
                 <p class="workspace-label">Keine Abgabe</p>
                 {#if selectedTaskMeta?.instruction_md}
-                  <div class="markdown-prose live-panel-summary__instruction">
-                    {@html renderMarkdown(selectedTaskMeta.instruction_md)}
-                  </div>
+                  <div class="markdown-prose live-panel-summary__instruction"><MarkdownContent source={selectedTaskMeta.instruction_md} style="display: contents" /></div>
                 {/if}
                 <p class="workspace-empty">
                   Für die gewählte Aufgabe liegt noch keine Abgabe vor.

@@ -10,6 +10,15 @@ const markdown = new MarkdownIt({
   linkify: true
 });
 
+// An explicit break is syntax only outside code; Markdown's code rules run first.
+markdown.inline.ruler.before("text", "explicit_break", (state, silent) => {
+  const match = /^<br\s*\/?>/i.exec(state.src.slice(state.pos));
+  if (!match) return false;
+  if (!silent) state.push("hardbreak", "br", 0);
+  state.pos += match[0].length;
+  return true;
+});
+
 markdown.validateLink = (url: string): boolean => /^https?:\/\//i.test(url);
 const defaultLinkOpen =
   markdown.renderer.rules.link_open ??
@@ -42,6 +51,7 @@ const ALLOWED_TAGS = [
   "li",
   "ol",
   "p",
+  "pre",
   "strong",
   "table",
   "tbody",
@@ -52,24 +62,14 @@ const ALLOWED_TAGS = [
   "ul"
 ] as const;
 
-const ALLOWED_ATTR = ["href", "target", "rel"] as const;
-const EXPLICIT_BREAK_TOKEN = "GUSTAV_LINE_BREAK_TOKEN";
-
-function normalizeRawHtml(raw: string): string {
-  return raw
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<br\s*\/?>/gi, EXPLICIT_BREAK_TOKEN)
-    .replace(/<\/?[^>]+>/g, "");
-}
-
+const ALLOWED_ATTR = ["href", "target", "rel", "class"] as const;
 export function renderMarkdown(raw: string | null | undefined): string {
-  const source = String(raw || "").trim();
-  if (!source) {
+  const source = String(raw ?? "");
+  if (!source.trim()) {
     return "";
   }
 
-  const rendered = markdown.render(normalizeRawHtml(source)).replaceAll(EXPLICIT_BREAK_TOKEN, "<br>");
+  const rendered = markdown.render(source);
   return DOMPurify.sanitize(rendered, {
     ALLOWED_TAGS: [...ALLOWED_TAGS],
     ALLOWED_ATTR: [...ALLOWED_ATTR]
@@ -78,7 +78,7 @@ export function renderMarkdown(raw: string | null | undefined): string {
 
 /** Readable noninteractive preview using the same grammar as the full renderer. */
 export function markdownPlainText(raw: string | null | undefined): string {
-  const tokens = markdown.parse(normalizeRawHtml(String(raw ?? "")), {});
+  const tokens = markdown.parse(String(raw ?? ""), {});
   function text(tokens: Token[]): string {
     return tokens.map((token) => {
       if (token.children) return text(token.children);
@@ -87,5 +87,54 @@ export function markdownPlainText(raw: string | null | undefined): string {
       return "";
     }).join("");
   }
-  return text(tokens).replaceAll(EXPLICIT_BREAK_TOKEN, " ").replace(/\s+/g, " ").trim();
+  return text(tokens).replace(/\s+/g, " ").trim();
+}
+
+export type MarkdownPart =
+  | { kind: "html"; html: string }
+  | { kind: "diagram"; index: number; source: string }
+  | { kind: "container"; tag: "ul" | "ol" | "li" | "div"; children: MarkdownPart[] };
+
+/** Keep the existing sanitized renderer; expose diagram fences as Svelte parts.
+ * Only ancestors containing diagrams need structural rendering, so nested
+ * lists retain their semantics without rebuilding Markdown's inline grammar.
+ */
+export function markdownDocument(raw: string | null | undefined): { parts: MarkdownPart[]; diagrams: string[] } {
+  const diagrams: string[] = [];
+  const isDiagram = (token: Token) => token.type === "fence" && token.info.trim().split(/\s+/, 1)[0] === "mermaid";
+  function parts(tokens: Token[]): MarkdownPart[] {
+    const output: MarkdownPart[] = [];
+    let buffer: Token[] = [];
+    function flush() {
+      if (!buffer.length) return;
+      output.push({ kind: "html", html: DOMPurify.sanitize(markdown.renderer.render(buffer, markdown.options, {}), {
+        ALLOWED_TAGS: [...ALLOWED_TAGS], ALLOWED_ATTR: [...ALLOWED_ATTR]
+      }) });
+      buffer = [];
+    }
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      if (isDiagram(token)) {
+        flush();
+        output.push({ kind: "diagram", index: diagrams.length, source: token.content });
+        diagrams.push(token.content);
+      } else if (token.nesting === 1) {
+        let depth = 1, end = i + 1;
+        for (; end < tokens.length; end++) {
+          depth += tokens[end].nesting;
+          if (!depth) break;
+        }
+        const children = tokens.slice(i + 1, end);
+        if (children.some(isDiagram)) {
+          flush();
+          const tag = ["ul", "ol", "li"].includes(token.tag) ? token.tag as "ul" | "ol" | "li" : "div";
+          output.push({ kind: "container", tag, children: parts(children) });
+        } else buffer.push(...tokens.slice(i, end + 1));
+        i = end;
+      } else buffer.push(token);
+    }
+    flush();
+    return output;
+  }
+  return { parts: parts(markdown.parse(String(raw ?? ""), {})), diagrams };
 }

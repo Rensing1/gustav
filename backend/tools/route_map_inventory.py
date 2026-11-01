@@ -72,6 +72,8 @@ def _response_model(spec: dict, op: Operation) -> str:
 
 
 def _role(path: str) -> str:
+    if path == "/api/markdown/diagrams":
+        return "student/teacher"
     if path.startswith("/auth/"):
         return "public/authenticated"
     if path in {"/health"} or path.startswith("/internal/health/"):
@@ -137,6 +139,8 @@ def _data_access(path: str) -> str:
 
 
 def _test_candidates(path: str) -> str:
+    if path == "/api/markdown/diagrams":
+        return "backend/tests/test_markdown_diagrams_api.py, frontend/e2e/markdown-code-diagrams.spec.ts"
     if path in {"/", "/about"}:
         return "backend/tests/test_navigation_roles_ui.py, backend/tests/test_app_composition_contract.py"
     if path == "/api/me":

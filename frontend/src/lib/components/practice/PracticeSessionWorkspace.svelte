@@ -2,7 +2,7 @@
   import PracticeH5PTask from "$lib/components/PracticeH5PTask.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { modalFocus } from "$lib/components/ui/modal-focus";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import type { LearningPracticeAttempt, LearningPracticeSession } from "$lib/types/practice";
   import PracticeFeedback from "./PracticeFeedback.svelte";
 
@@ -70,9 +70,7 @@
 
       <div class="practice-session__main">
         <article class="practice-task-card">
-          <div class="practice-task-card__instruction markdown-prose">
-            {@html renderMarkdown(item.instruction_md)}
-          </div>
+          <MarkdownContent class="practice-task-card__instruction markdown-prose" source={item.instruction_md} />
 
           {#if item.status === "active"}
             {#if item.kind === "native"}

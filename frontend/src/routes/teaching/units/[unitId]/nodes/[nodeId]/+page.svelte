@@ -12,7 +12,7 @@
     canonicalMaterialMime,
     isInlineMaterialMime
   } from "$lib/utils/material-file-types";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import GraphDeleteDialog from "$lib/components/teacher-unit-graph/GraphDeleteDialog.svelte";
   import ContentDeleteDialog from "$lib/components/teacher-node-editor/ContentDeleteDialog.svelte";
   import TeacherCriteriaEditor from "$lib/components/teacher-node-editor/TeacherCriteriaEditor.svelte";
@@ -1821,7 +1821,7 @@
                         <label class="workspace-field"><span>Probeantwort eines Schülers</span><textarea rows="3" value={dialogPreviewInputs[task.id] ?? ""} oninput={(event) => (dialogPreviewInputs[task.id] = event.currentTarget.value)}></textarea></label>
                         <button class="workspace-link-action" type="button" disabled={dialogPreviews[task.id]?.pending || !(dialogPreviewInputs[task.id] ?? "").trim()} onclick={() => previewDialog(task)}>KI-Antwort testen</button>
                         {#if dialogPreviews[task.id]?.error}<StatusMessage tone="error" title="Vorschau nicht verfügbar" description={dialogPreviews[task.id].error} />{/if}
-                        {#if dialogPreviews[task.id]?.reply}<div class="markdown-prose">{@html renderMarkdown(dialogPreviews[task.id].reply ?? "")}</div>{/if}
+                        {#if dialogPreviews[task.id]?.reply}<MarkdownContent class="markdown-prose" source={dialogPreviews[task.id].reply ?? ""} />{/if}
                         {#if dialogPreviews[task.id]?.starters.length}<p>Satzanfänge: {dialogPreviews[task.id].starters.join(" · ")}</p>{/if}
                       </details>
                     {/if}

@@ -71,7 +71,7 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert "live-selection__unit-chip" not in page_source
     assert "LearningSubmissionArtifactView" in page_source
     assert "buildSubmissionArtifactView" in page_source
-    assert "renderMarkdown" in page_source
+    assert "MarkdownContent" in page_source
     assert 'role="tablist"' in page_source
     assert "selected_task_detail" in page_source
     assert "selectedTaskIdState" in page_source
@@ -107,5 +107,5 @@ def test_frontend_live_page_uses_summary_and_detail_read_models() -> None:
     assert "Keine Vorschau" in page_source
     assert 'artifactSubmission.text_body && (artifactSubmission.text_body.startsWith("# makecode.evidence.v1")' not in page_source
     assert 'artifactSubmission.text_body.startsWith("# scratch.evidence.v2")' not in page_source
-    assert "@html renderMarkdown(stripSubmissionSchemaHeader(selectedSubmission.text_body))" in page_source
+    assert "source={stripSubmissionSchemaHeader(selectedSubmission.text_body)}" in page_source
     assert '<pre class="learning-task-submission-summary__plain">{stripSubmissionSchemaHeader(selectedSubmission.text_body)}</pre>' in page_source

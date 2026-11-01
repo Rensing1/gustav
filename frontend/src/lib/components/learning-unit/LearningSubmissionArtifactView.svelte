@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
   import type { LearningSubmission } from "$lib/types/learning";
 
@@ -24,9 +25,7 @@
         <p class="learning-submission-artifact__eyebrow">Strukturansicht</p>
         <p class="learning-submission-artifact__meta">{artifact.fileSummary}</p>
       </div>
-      <div class={`markdown-prose structure-evidence ${artifact.kind}-evidence`}>
-        {@html artifact.html}
-      </div>
+      <MarkdownContent class={`markdown-prose structure-evidence ${artifact.kind}-evidence`} source={artifact.markdown} />
     {/if}
 
     {#if artifact.downloadUrl}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import DialogMessage from "./DialogMessage.svelte";
   import { onMount } from "svelte";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
 
   type TranscriptTurn = {
@@ -62,11 +62,11 @@
     <section class="dialog-submission-answer" aria-label="Abschlussaufgabe und eigene Antwort">
       {#if transcript.dialog.closing_prompt_md}
         <h4>Zum Abschluss</h4>
-        <div class="dialog-submission-answer__prompt markdown-prose">{@html renderMarkdown(transcript.dialog.closing_prompt_md)}</div>
+        <MarkdownContent class="dialog-submission-answer__prompt markdown-prose" source={transcript.dialog.closing_prompt_md} />
       {/if}
       <div class="dialog-submission-answer__response">
         <h4>Deine Antwort</h4>
-        <div class="markdown-prose">{@html renderMarkdown(transcript.closing_answer_md)}</div>
+        <MarkdownContent class="markdown-prose" source={transcript.closing_answer_md} />
       </div>
     </section>
   {/if}

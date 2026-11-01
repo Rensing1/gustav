@@ -6,3 +6,7 @@ coverage
 *.log
 *.tsbuildinfo
 
+
+# The tracked TypeScript configuration is authoritative.
+vite.config.js
+vite.config.d.ts

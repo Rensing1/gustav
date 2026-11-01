@@ -1,7 +1,7 @@
 <script lang="ts">
   import PageActionHead from "$lib/components/ui/PageActionHead.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import type { ActionData, PageData } from "./$types";
   let { data, form }: { data: PageData; form?: ActionData } = $props();
 
@@ -35,9 +35,9 @@
     {#each data.portfolio.submissions as submission}
       <article class="learning-portfolio__entry">
         <header><h2>{taskTitle(submission.task_snapshot)}</h2><time datetime={submission.completed_at || submission.created_at}>{new Date(submission.completed_at || submission.created_at).toLocaleDateString("de-DE")}</time></header>
-        {#if submission.text_body}<div class="learning-portfolio__content"><h3>Meine Abgabe</h3><div class="markdown-prose">{@html renderMarkdown(submission.text_body)}</div></div>{/if}
+        {#if submission.text_body}<div class="learning-portfolio__content"><h3>Meine Abgabe</h3><MarkdownContent class="markdown-prose" source={submission.text_body} /></div>{/if}
         {#if submission.file_href}<a class="workspace-link-action" href={submission.file_href}>Originaldatei herunterladen</a>{/if}
-        {#if submission.feedback_md}<div class="learning-portfolio__feedback"><h3>Rückmeldung</h3><div class="markdown-prose">{@html renderMarkdown(submission.feedback_md)}</div></div>{/if}
+        {#if submission.feedback_md}<div class="learning-portfolio__feedback"><h3>Rückmeldung</h3><MarkdownContent class="markdown-prose" source={submission.feedback_md} /></div>{/if}
       </article>
     {:else}
       <p class="workspace-empty">Für diesen Kurs liegen keine finalen Lernleistungen vor.</p>

@@ -28,7 +28,7 @@
   import { h5pProgressLabel, latestH5PScore, taskIsComplete } from "$lib/learning-unit/task-completion";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import { buildSubmissionArtifactView } from "$lib/utils/submission-artifacts";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import type { LearningSubmission, LearningTask, SubmissionHistoryLoadState } from "$lib/types/learning";
   import type { SubmitFunction } from "@sveltejs/kit";
   import { onMount, tick, untrack } from "svelte";
@@ -921,9 +921,7 @@
         {#if workspaceOnly && (task.kind !== "dialog" || dialogCompactSurface === "task")}
           <section class="learning-task-workspace-statement" aria-label="Vollständige Aufgabenstellung">
             <p class="workspace-label">Aufgabe</p>
-            <div class="markdown-prose">
-              {@html renderMarkdown(task.instruction_md)}
-            </div>
+            <MarkdownContent class="markdown-prose" source={task.instruction_md} />
           </section>
         {/if}
 
@@ -945,9 +943,7 @@
         {/if}
 
         {#if !usesCompactTaskLayout()}
-          <div class="markdown-prose">
-            {@html renderMarkdown(task.instruction_md)}
-          </div>
+          <MarkdownContent class="markdown-prose" source={task.instruction_md} />
 
           {#if task.kind === "h5p"}
             <section class="learning-task-status" aria-label="Aufgabenstatus">
@@ -972,9 +968,7 @@
               <div>
                 <h5 class="learning-task-inline-editor__title">{taskTitle}</h5>
                 {#if usesCompactTaskLayout()}
-                  <div class="markdown-prose learning-task-inline-editor__statement">
-                    {@html renderMarkdown(task.instruction_md)}
-                  </div>
+                  <MarkdownContent class="markdown-prose learning-task-inline-editor__statement" source={task.instruction_md} />
                 {/if}
               </div>
               {#if task.kind !== "dialog" && !reviewPanelOpen}
@@ -1190,9 +1184,7 @@
                     <details class="learning-response-panel" bind:open={feedbackDisclosureOpen}>
                       <summary>Rückmeldung</summary>
                       <div class="learning-response-panel__body learning-feedback-response">
-                        <div class="learning-feedback-response__copy markdown-prose">
-                          {@html renderMarkdown(latestSubmissionOrThrow().feedback_md ?? "")}
-                        </div>
+                        <MarkdownContent class="learning-feedback-response__copy markdown-prose" source={latestSubmissionOrThrow().feedback_md ?? ""} />
                       </div>
                     </details>
                   {/if}
@@ -1231,9 +1223,7 @@
                           <a class="learning-work-item__link" href={submittedFile()?.url}>Datei öffnen</a>
                         </div>
                       {:else if latestSubmissionOrThrow().text_body}
-                        <div class="learning-response-panel__reviewed-draft markdown-prose">
-                          {@html renderMarkdown(latestSubmissionOrThrow().text_body ?? "")}
-                        </div>
+                        <MarkdownContent class="learning-response-panel__reviewed-draft markdown-prose" source={latestSubmissionOrThrow().text_body ?? ""} />
                       {/if}
                     </div>
                   </details>

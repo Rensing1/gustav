@@ -3566,7 +3566,7 @@
       "license": "MIT",
       "name": "undici",
       "policy": "allowed",
-      "version": "7.29.1",
+      "version": "7.30.1",
       "workspace": "frontend"
     },
     {
@@ -5064,6 +5064,1142 @@
       "policy": "allowed",
       "version": "3.3.1",
       "workspace": "h5p-service"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@antfu/install-pkg",
+      "policy": "allowed",
+      "version": "2.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@braintree/sanitize-url",
+      "policy": "allowed",
+      "version": "7.1.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "@chevrotain/cst-dts-gen",
+      "policy": "allowed",
+      "version": "13.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "@chevrotain/gast",
+      "policy": "allowed",
+      "version": "13.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "@chevrotain/regexp-to-ast",
+      "policy": "allowed",
+      "version": "13.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "@chevrotain/types",
+      "policy": "allowed",
+      "version": "13.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "@chevrotain/utils",
+      "policy": "allowed",
+      "version": "13.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@iconify/types",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@iconify/utils",
+      "policy": "allowed",
+      "version": "3.1.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@mermaid-js/parser",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "@puppeteer/browsers",
+      "policy": "allowed",
+      "version": "3.2.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3",
+      "policy": "allowed",
+      "version": "7.4.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-array",
+      "policy": "allowed",
+      "version": "3.2.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-axis",
+      "policy": "allowed",
+      "version": "3.0.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-brush",
+      "policy": "allowed",
+      "version": "3.0.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-chord",
+      "policy": "allowed",
+      "version": "3.0.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-color",
+      "policy": "allowed",
+      "version": "3.1.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-contour",
+      "policy": "allowed",
+      "version": "3.0.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-delaunay",
+      "policy": "allowed",
+      "version": "6.0.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-dispatch",
+      "policy": "allowed",
+      "version": "3.0.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-drag",
+      "policy": "allowed",
+      "version": "3.0.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-dsv",
+      "policy": "allowed",
+      "version": "3.0.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-ease",
+      "policy": "allowed",
+      "version": "3.0.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-fetch",
+      "policy": "allowed",
+      "version": "3.0.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-force",
+      "policy": "allowed",
+      "version": "3.0.10",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-format",
+      "policy": "allowed",
+      "version": "3.0.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-geo",
+      "policy": "allowed",
+      "version": "3.1.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-hierarchy",
+      "policy": "allowed",
+      "version": "3.1.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-interpolate",
+      "policy": "allowed",
+      "version": "3.0.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-path",
+      "policy": "allowed",
+      "version": "3.1.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-polygon",
+      "policy": "allowed",
+      "version": "3.0.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-quadtree",
+      "policy": "allowed",
+      "version": "3.0.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-random",
+      "policy": "allowed",
+      "version": "3.0.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-scale",
+      "policy": "allowed",
+      "version": "4.0.9",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-scale-chromatic",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-selection",
+      "policy": "allowed",
+      "version": "3.0.12",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-shape",
+      "policy": "allowed",
+      "version": "3.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-time",
+      "policy": "allowed",
+      "version": "3.0.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-time-format",
+      "policy": "allowed",
+      "version": "4.0.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-timer",
+      "policy": "allowed",
+      "version": "3.0.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-transition",
+      "policy": "allowed",
+      "version": "3.0.9",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/d3-zoom",
+      "policy": "allowed",
+      "version": "3.0.9",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/geojson",
+      "policy": "allowed",
+      "version": "7946.0.16",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@types/trusted-types",
+      "policy": "allowed",
+      "version": "2.0.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "@upsetjs/venn.js",
+      "policy": "allowed",
+      "version": "2.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ansi-regex",
+      "policy": "allowed",
+      "version": "6.5.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ansi-styles",
+      "policy": "allowed",
+      "version": "6.2.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "chevrotain",
+      "policy": "allowed",
+      "version": "13.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "chromium-bidi",
+      "policy": "allowed",
+      "version": "157.0.8090-0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "cliui",
+      "policy": "allowed",
+      "version": "9.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "commander",
+      "policy": "allowed",
+      "version": "15.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "commander",
+      "policy": "allowed",
+      "version": "7.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cose-base",
+      "policy": "allowed",
+      "version": "1.0.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cose-base",
+      "policy": "allowed",
+      "version": "2.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cytoscape",
+      "policy": "allowed",
+      "version": "3.34.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cytoscape-cose-bilkent",
+      "policy": "allowed",
+      "version": "4.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "cytoscape-fcose",
+      "policy": "allowed",
+      "version": "2.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3",
+      "policy": "allowed",
+      "version": "7.9.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "d3-array",
+      "policy": "allowed",
+      "version": "2.12.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-array",
+      "policy": "allowed",
+      "version": "3.2.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-axis",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-brush",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-chord",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-color",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-contour",
+      "policy": "allowed",
+      "version": "4.0.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-delaunay",
+      "policy": "allowed",
+      "version": "6.0.4",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-dispatch",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-drag",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-dsv",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "d3-ease",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-fetch",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-force",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-format",
+      "policy": "allowed",
+      "version": "3.1.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-geo",
+      "policy": "allowed",
+      "version": "3.1.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-hierarchy",
+      "policy": "allowed",
+      "version": "3.1.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-interpolate",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "d3-path",
+      "policy": "allowed",
+      "version": "1.0.9",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-path",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-polygon",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-quadtree",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-random",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "d3-sankey",
+      "policy": "allowed",
+      "version": "0.12.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-scale",
+      "policy": "allowed",
+      "version": "4.0.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-scale-chromatic",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-selection",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "d3-shape",
+      "policy": "allowed",
+      "version": "1.3.7",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-shape",
+      "policy": "allowed",
+      "version": "3.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-time",
+      "policy": "allowed",
+      "version": "3.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-time-format",
+      "policy": "allowed",
+      "version": "4.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-timer",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-transition",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "d3-zoom",
+      "policy": "allowed",
+      "version": "3.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "dagre-d3-es",
+      "policy": "allowed",
+      "version": "7.0.14",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "dayjs",
+      "policy": "allowed",
+      "version": "1.11.23",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "delaunator",
+      "policy": "allowed",
+      "version": "5.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "devtools-protocol",
+      "policy": "allowed",
+      "version": "0.0.1704951",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "name": "dompurify",
+      "policy": "allowed",
+      "version": "3.4.17",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "EPL-2.0",
+      "name": "elkjs",
+      "policy": "allowed",
+      "version": "0.9.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "emoji-regex",
+      "policy": "allowed",
+      "version": "10.6.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "es-toolkit",
+      "policy": "allowed",
+      "version": "1.53.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "escalade",
+      "policy": "allowed",
+      "version": "3.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "get-caller-file",
+      "policy": "allowed",
+      "version": "2.0.5",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "get-east-asian-width",
+      "policy": "allowed",
+      "version": "1.7.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "hachure-fill",
+      "policy": "allowed",
+      "version": "0.5.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "iconv-lite",
+      "policy": "allowed",
+      "version": "0.6.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "import-meta-resolve",
+      "policy": "allowed",
+      "version": "4.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "internmap",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "internmap",
+      "policy": "allowed",
+      "version": "2.0.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "katex",
+      "policy": "allowed",
+      "version": "0.18.10",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "khroma",
+      "policy": "allowed",
+      "version": "2.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "layout-base",
+      "policy": "allowed",
+      "version": "1.0.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "layout-base",
+      "policy": "allowed",
+      "version": "2.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "lodash-es",
+      "policy": "allowed",
+      "version": "4.18.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "marked",
+      "policy": "allowed",
+      "version": "16.4.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mermaid",
+      "policy": "allowed",
+      "version": "12.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "mitt",
+      "policy": "allowed",
+      "version": "3.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "modern-tar",
+      "policy": "allowed",
+      "version": "0.8.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "package-manager-detector",
+      "policy": "allowed",
+      "version": "1.9.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "path-data-parser",
+      "policy": "allowed",
+      "version": "0.1.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "points-on-curve",
+      "policy": "allowed",
+      "version": "0.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "points-on-path",
+      "policy": "allowed",
+      "version": "0.2.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "puppeteer-core",
+      "policy": "allowed",
+      "version": "25.16.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Unlicense",
+      "name": "robust-predicates",
+      "policy": "allowed",
+      "version": "3.0.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "roughjs",
+      "policy": "allowed",
+      "version": "4.6.6",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "BSD-3-Clause",
+      "name": "rw",
+      "policy": "allowed",
+      "version": "1.3.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "safer-buffer",
+      "policy": "allowed",
+      "version": "2.1.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "string-width",
+      "policy": "allowed",
+      "version": "7.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "string-width",
+      "policy": "allowed",
+      "version": "7.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "string-width",
+      "policy": "allowed",
+      "version": "8.3.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "strip-ansi",
+      "policy": "allowed",
+      "version": "7.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "stylis",
+      "policy": "allowed",
+      "version": "4.4.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "tinyexec",
+      "policy": "allowed",
+      "version": "1.3.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ts-dedent",
+      "policy": "allowed",
+      "version": "2.3.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "typed-query-selector",
+      "policy": "allowed",
+      "version": "2.12.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "uuid",
+      "policy": "allowed",
+      "version": "14.0.3",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "Apache-2.0",
+      "name": "webdriver-bidi-protocol",
+      "policy": "allowed",
+      "version": "1.0.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "wrap-ansi",
+      "policy": "allowed",
+      "version": "9.0.2",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "ws",
+      "policy": "allowed",
+      "version": "8.22.1",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "y18n",
+      "policy": "allowed",
+      "version": "5.0.8",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "yargs",
+      "policy": "allowed",
+      "version": "18.2.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "ISC",
+      "name": "yargs-parser",
+      "policy": "allowed",
+      "version": "22.0.0",
+      "workspace": "diagram-renderer"
+    },
+    {
+      "ecosystem": "node",
+      "license": "MIT",
+      "name": "zod",
+      "policy": "allowed",
+      "version": "4.6.7",
+      "workspace": "diagram-renderer"
     }
   ],
   "policy": {
@@ -5087,6 +6223,11 @@
     ],
     "mode": "offline-lockfile-and-installed-metadata",
     "node_license_overrides": [
+      {
+        "license": "MIT",
+        "name": "khroma",
+        "workspace": "diagram-renderer"
+      },
       {
         "license": "MIT",
         "name": "busboy",
@@ -5117,12 +6258,13 @@
     "backend/requirements-harness.txt",
     "backend/constraints-ai.txt",
     "frontend/package-lock.json",
-    "h5p-service/package-lock.json"
+    "h5p-service/package-lock.json",
+    "diagram-renderer/package-lock.json"
   ],
   "summary": {
-    "node_entries": 522,
+    "node_entries": 664,
     "python_entries": 127,
     "review_required_entries": 0,
-    "total_entries": 649
+    "total_entries": 791
   }
 }

@@ -16,6 +16,7 @@
   import "$lib/styles/index.css";
   import ContextNavigation from "$lib/components/ui/ContextNavigation.svelte";
   import AppHeader from "$lib/components/ui/AppHeader.svelte";
+  import { themeContextKey } from "$lib/theme/context";
   import { syncDocumentTheme } from "$lib/theme/client";
   import { setContext, type Snippet } from "svelte";
   import { workspaceNavigationKey, type WorkspaceNavigation } from "$lib/types/workspace-navigation";
@@ -29,6 +30,7 @@
   setContext(workspaceNavigationKey, workspaceNavigation);
   let themeOverride = $state<ThemePreference | null>(null);
   let currentTheme = $derived<ThemePreference>(themeOverride ?? data.theme);
+  setContext(themeContextKey, () => currentTheme);
   let themeWriteController = $state<AbortController | null>(null);
 
   const learnerNavItems = [

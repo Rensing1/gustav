@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import html
 import re
+import time
 from io import BytesIO
 from typing import Any
 
+from backend.teaching.print_diagrams import diagram_key, render_diagrams
 from backend.teaching.printouts import PrintExportError, PrintPolicy
 from backend.web.components.markdown import render_markdown_safe
 
@@ -26,10 +28,22 @@ def _value(item: object, name: str, default: object = None) -> object:
     return item.get(name, default) if isinstance(item, dict) else getattr(item, name, default)
 
 
-def _markdown_for_print(source: object) -> str:
+def _markdown_for_print(source: object, *, diagram_assets: dict[str, str | None] | None = None) -> str:
     """Render safe Markdown and expose every link destination on paper."""
 
     rendered = render_markdown_safe(str(source or ""))
+
+    if diagram_assets is not None:
+        def replace_diagram(match: re.Match[str]) -> str:
+            source = html.unescape(match.group(1))
+            key = diagram_key(source)
+            if key not in diagram_assets:
+                raise PrintExportError("pdf_render_failed", 503)
+            asset = diagram_assets[key]
+            if asset is None:
+                return '<p class="hint">Das Diagramm konnte nicht dargestellt werden. Bitte prüfe den Mermaid-Quelltext.</p>' + match.group(0)
+            return f'<img src="{html.escape(asset, quote=True)}" alt="Mermaid-Diagramm">'
+        rendered = re.sub(r'<pre><code class="language-mermaid">([\s\S]*?)</code></pre>', replace_diagram, rendered)
 
     def replace_link(match: re.Match[str]) -> str:
         # href is already HTML-escaped; decode that layer before rendering text.
@@ -138,10 +152,10 @@ def _validate_image(content: bytes, *, title: str) -> None:
         raise PrintExportError("material_unprintable", 422, material_title=title) from exc
 
 
-def _html_item(item: object, *, asset_number: int, assets: dict[str, tuple[bytes, str]]) -> str:
+def _html_item(item: object, *, asset_number: int, assets: dict[str, tuple[bytes, str]], diagram_assets: dict[str, str | None] | None = None) -> str:
     title = str(_value(item, "title", "") or "")
     item_type = str(_value(item, "type", "") or "")
-    body = _markdown_for_print(_value(item, "body_md", ""))
+    body = _markdown_for_print(_value(item, "body_md", ""), diagram_assets=diagram_assets)
     hint = str(_value(item, "digital_hint", "") or "")
     item_class = "item image-item" if item_type == "image" else "item"
     parts = [f'<article class="{item_class}"><h3>{html.escape(title)}</h3>', f'<div class="item-body">{body}</div>']
@@ -161,16 +175,23 @@ def _html_item(item: object, *, asset_number: int, assets: dict[str, tuple[bytes
     return "".join(parts)
 
 
-def _content_pdf(document: object, items: list[tuple[str, object]], *, show_header: bool) -> bytes:
+def _content_pdf(document: object, items: list[tuple[str, object]], *, show_header: bool, diagrams: dict[str, bytes | None] | None = None) -> bytes:
     title = str(_value(document, "title", "Lerneinheit") or "Lerneinheit")
     assets: dict[str, tuple[bytes, str]] = {}
+    diagram_assets: dict[str, str | None] = {}
+    for key, content in (diagrams or {}).items():
+        url = f"print-diagram:{key}"
+        diagram_assets[key] = url if content is not None else None
+        if content is not None:
+            _validate_image(content, title="Mermaid-Diagramm")
+            assets[url] = (content, "image/png")
     body = [_header(title)] if show_header else []
     current_node = None
     for index, (node_title, item) in enumerate(items):
         if node_title != current_node:
             body.append(f'<h2 class="section-heading">{html.escape(node_title)}</h2>')
             current_node = node_title
-        body.append(_html_item(item, asset_number=index, assets=assets))
+        body.append(_html_item(item, asset_number=index, assets=assets, diagram_assets=diagram_assets if diagrams is not None else None))
     markup = "<!doctype html><html lang=" + '"de"><head><meta charset="utf-8"><style>' + _base_styles() + "</style></head><body>" + "".join(body) + "</body></html>"
     return _weasyprint_pdf(markup, assets=assets)
 
@@ -219,6 +240,9 @@ class LearningUnitPdfRenderer:
     PDFs and images are nevertheless parsed defensively and never fetched by URL.
     """
 
+    def __init__(self, diagrams: dict[str, bytes | None] | None = None) -> None:
+        self.diagrams = diagrams
+
     def render(self, document: object, *, policy: PrintPolicy) -> bytes:
         try:
             from pypdf import PdfReader, PdfWriter, Transformation
@@ -233,7 +257,7 @@ class LearningUnitPdfRenderer:
             nonlocal show_header
             if not pending:
                 return
-            generated = PdfReader(BytesIO(_content_pdf(document, pending, show_header=show_header)), strict=True)
+            generated = PdfReader(BytesIO(_content_pdf(document, pending, show_header=show_header, diagrams=self.diagrams)), strict=True)
             for generated_page in generated.pages:
                 page_specs.append((generated_page, False, "", False))
             pending.clear()
@@ -323,7 +347,7 @@ class LearningUnitPdfRenderer:
         return content
 
 
-def _render_in_worker(connection: Any, document: object, policy: PrintPolicy, memory_limit_bytes: int) -> None:
+def _render_in_worker(connection: Any, document: object, policy: PrintPolicy, memory_limit_bytes: int, diagrams: dict[str, bytes | None] | None = None) -> None:
     """Child-process entry point with OS-enforced resource ceilings."""
 
     try:
@@ -334,7 +358,7 @@ def _render_in_worker(connection: Any, document: object, policy: PrintPolicy, me
         resource.setrlimit(resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes))
         resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
         resource.setrlimit(resource.RLIMIT_FSIZE, (policy.max_output_bytes, policy.max_output_bytes))
-        content = LearningUnitPdfRenderer().render(document, policy=policy)
+        content = LearningUnitPdfRenderer(diagrams).render(document, policy=policy)
         connection.send(("ok", content, None, None))
     except PrintExportError as exc:
         connection.send(("error", exc.code, exc.status_code, exc.material_title))
@@ -359,19 +383,22 @@ class IsolatedLearningUnitPdfRenderer:
     def render(self, document: object, *, policy: PrintPolicy) -> bytes:
         import multiprocessing
 
+        deadline = time.monotonic() + self.timeout_seconds
+        diagrams = render_diagrams(document, deadline=deadline, policy=policy)
+
         # ``spawn`` starts from a clean interpreter. A forked web worker would
         # inherit its whole virtual address space and make RLIMIT_AS misleading.
         context = multiprocessing.get_context("spawn")
         parent_connection, child_connection = context.Pipe(duplex=False)
         process = context.Process(
             target=_render_in_worker,
-            args=(child_connection, document, policy, self.memory_limit_bytes),
+            args=(child_connection, document, policy, self.memory_limit_bytes, diagrams),
             daemon=True,
         )
         process.start()
         child_connection.close()
         try:
-            if not parent_connection.poll(self.timeout_seconds):
+            if not parent_connection.poll(max(0, deadline - time.monotonic())):
                 process.terminate()
                 process.join(timeout=2)
                 raise PrintExportError("pdf_render_timeout", 503)

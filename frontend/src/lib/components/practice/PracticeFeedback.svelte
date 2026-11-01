@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import { practiceClassificationLabel, practiceDueLabel } from "$lib/practice/practice-presentation";
   import type { LearningPracticeAttempt, LearningPracticeSessionItem } from "$lib/types/practice";
 
@@ -34,9 +34,7 @@
   </header>
 
   {#if attempt.feedback_md}
-    <div class="practice-feedback__body markdown-prose">
-      {@html renderMarkdown(attempt.feedback_md)}
-    </div>
+    <MarkdownContent class="practice-feedback__body markdown-prose" source={attempt.feedback_md} />
   {/if}
 
   {#if dueLabel}
@@ -50,7 +48,7 @@
     {#if solution}
       <section class="practice-solution" aria-labelledby="practice-solution-title">
         <h4 id="practice-solution-title">Musterlösung</h4>
-        <div class="markdown-prose">{@html renderMarkdown(solution)}</div>
+        <MarkdownContent class="markdown-prose" source={solution} />
       </section>
     {:else}
       <form method="POST" action="?/solution">

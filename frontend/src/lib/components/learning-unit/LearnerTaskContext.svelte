@@ -3,7 +3,7 @@
   import LearningMaterialCard from "./LearningMaterialCard.svelte";
   import type { LearnerMaterialContextModule } from "$lib/learning-unit/workspace";
   import type { LearningSubmission, SubmissionHistoryLoadState } from "$lib/types/learning";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
 
 
   let {
@@ -142,9 +142,7 @@
         {/if}
       </div>
       <div class="learner-task-context__assignment">
-        <div class="learner-task-context__instruction">
-          {@html renderMarkdown(instructionMd)}
-        </div>
+        <MarkdownContent class="learner-task-context__instruction" source={instructionMd} />
       </div>
     </header>
 

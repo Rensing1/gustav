@@ -1,0 +1,8 @@
+{
+  "name": "gustav-diagram-renderer",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13.0" },
+  "scripts": { "start": "node server.mjs", "test": "node --test *.test.mjs" },
+  "dependencies": { "mermaid": "12.2.0", "puppeteer-core": "25.16.0" }
+}

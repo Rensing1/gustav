@@ -63,3 +63,10 @@ def test_render_markdown_pipes_without_separator_render_as_text():
     assert "<table" not in html
     assert "A | B | C" in html
     assert "D | E | F" in html
+
+
+def test_explicit_breaks_are_syntax_only_outside_code():
+    html = render_markdown_safe('Vorher<br>Nachher und `<br>`\n\n```html\n<br>\n<script>alert(1)</script>\n```')
+    assert 'Vorher<br' in html
+    assert '<code>&lt;br&gt;</code>' in html
+    assert '<pre><code class="language-html">&lt;br&gt;\n&lt;script&gt;alert(1)&lt;/script&gt;\n</code></pre>' in html

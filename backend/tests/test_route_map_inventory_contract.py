@@ -117,3 +117,9 @@ def test_route_map_is_synchronized_with_generator(monkeypatch) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "route-map-inventory-ok" in result.stdout
     assert result.stderr == ""
+
+
+def test_markdown_diagram_route_identifies_its_roles_and_tests() -> None:
+    from backend.tools.route_map_inventory import _role, _test_candidates
+    assert _role("/api/markdown/diagrams") == "student/teacher"
+    assert "test_markdown_diagrams_api.py" in _test_candidates("/api/markdown/diagrams")

@@ -64,8 +64,8 @@ describe("buildSubmissionArtifactView", () => {
     if (artifact?.kind !== "scratch") {
       throw new Error("Expected a scratch artifact");
     }
-    expect(artifact.html).toContain("Target Stage");
-    expect(artifact.html).not.toContain("scratch.evidence.v2");
+    expect(artifact.markdown).toContain("Target Stage");
+    expect(artifact.markdown).not.toContain("scratch.evidence.v2");
   });
 
   it("renders filius evidence as a structure view without the schema heading", () => {
@@ -98,8 +98,8 @@ describe("buildSubmissionArtifactView", () => {
     if (artifact?.kind !== "filius") {
       throw new Error("Expected a filius artifact");
     }
-    expect(artifact.html).toContain("Ground Frame");
-    expect(artifact.html).toContain("filius.software.dhcp.DHCPServer");
-    expect(artifact.html).not.toContain("filius.evidence.v1");
+    expect(artifact.markdown).toContain("Ground Frame");
+    expect(artifact.markdown).toContain("filius.software.dhcp.DHCPServer");
+    expect(artifact.markdown).not.toContain("filius.evidence.v1");
   });
 });

@@ -70,3 +70,9 @@ def test_harness_lock_includes_installer_dependencies_for_fresh_environments():
     assert "\npip==" in lock
     assert "\nsetuptools==" in lock
     assert "# WARNING:" not in lock
+
+
+def test_inventory_covers_the_private_diagram_renderer():
+    inventory = supply_chain_check.build_inventory()
+    assert "diagram-renderer/package-lock.json" in inventory["sources"]
+    assert any(entry.get("workspace") == "diagram-renderer" and entry["name"] == "mermaid" for entry in inventory["entries"])

@@ -27,6 +27,7 @@ def run_audits(*, run: Callable = subprocess.run) -> int:
         "dspy-upstream", [sys.executable, "-m", "pip_audit", "--no-deps", "--disable-pip",
                           "-r", "build_support/dspy/upstream-audit.txt"], ROOT,
     ))
+    commands = (*commands, ("diagrams", ["npm", "audit", "--omit=dev", "--audit-level=low"], ROOT / "diagram-renderer"))
     environment = {**os.environ, "PIP_FIND_LINKS": str(ROOT / ".tmp/security-wheels")}
     failed = False
     for label, command, cwd in commands:

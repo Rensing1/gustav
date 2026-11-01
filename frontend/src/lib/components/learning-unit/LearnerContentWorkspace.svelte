@@ -9,7 +9,7 @@
   import LearningTaskCard from "$lib/components/learning-unit/LearningTaskCard.svelte";
   import WorkspaceOutline from "$lib/components/ui/WorkspaceOutline.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
-  import { renderMarkdown } from "$lib/utils/markdown";
+  import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import {
     completionReturnDestination,
     learnerReturnLabel,

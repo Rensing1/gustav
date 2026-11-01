@@ -2,6 +2,8 @@
 
 ## 2026-11-01
 
+- feat(markdown): Codeblöcke erhalten Zeilenumbrüche, Einrückungen und HTML-Beispiele als ungefährlichen Text. Ausdrücklich markierte Mermaid-Blöcke werden in Markdown-Ansichten und der PDF-Druckfassung grafisch dargestellt. Quelltext, Fehlerhinweise und Hell-/Dunkeldarstellung bleiben zugänglich; der Editor behält seine bisherigen Bedienelemente.
+
 - fix(learning): Genehmigte Analyse- und Rückmeldungsprompts wörtlich übernommen und auf Bildabgaben, kriterienlose Rückmeldungen und Dialog-Abschluss übertragen. Starre Rückmeldungsstruktur und vorsorgliche Nullwertung bei Unsicherheit entfallen. Die Dialog-Abschlussauswertung erhält nun den internen Lehrkraftkontext; Ausgabeformate, Modelle und Wiederholungsplanung bleiben unverändert. Promptreferenz und vollständiger Wortlaut sind durch Tests abgesichert.
 
 - feat(graph): Gemeinsamer Modulgraph mit horizontalen Lernwegen, Viererzeilen und strukturellen Umbrüchen vor und nach Verzweigungen. Freie Module bilden ein Raster; berechnete Verbindungspfade umgehen Karten und Phasenüberschriften. Rollen und Geräte teilen dieselbe Karte, Geometrie wird bei unveränderter Struktur wiederverwendet. Drag & Drop bewegt ausschließlich das gezogene Modul; ungültige Reihenfolgen werden wiederhergestellt.

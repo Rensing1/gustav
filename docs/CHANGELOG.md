@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-01
+
+- fix(learning): Materialtitel in der bestehenden Aufgaben-Seitenleiste klappen ihre Inhalte direkt unter dem Eintrag auf oder zu. Text-, Datei-, H5P- und Dialogbearbeitung bleiben erhalten; mehrere Materialien sind gleichzeitig lesbar. Ohne gespeicherten Zustand bleiben sie zunächst geschlossen. Die Großansicht ist eine gesonderte Aktion. Bestehende Materialviewer einschließlich Simulationen werden wiederverwendet.
+
 ## 2026-10-31
 
 - fix(learning): Der räumliche Modulgraph wird wieder auf allen Displaygrößen angezeigt. Auf schmalen Displays fokussiert eine neue Ansicht ein lesbares Modul; Gesamtansicht, Zoom und gespeicherte Kamera bleiben verfügbar. Die mobile Ersatzliste entfällt. Freischaltung und Lehrerbedienung bleiben unverändert.

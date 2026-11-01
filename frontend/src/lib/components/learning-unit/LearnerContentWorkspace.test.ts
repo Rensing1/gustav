@@ -291,8 +291,9 @@ describe("LearnerContentWorkspace", () => {
     expect(firstMaterial).not.toHaveAttribute("aria-current");
     expect(within(outline).getByRole("button", { name: /Grenzen digitaler Überwachung/ })).toBeInTheDocument();
     await fireEvent.click(firstMaterial);
-    expect(props.onOpenContextReference).toHaveBeenCalledWith("material:material-1");
-    expect(within(context).queryByText("Ein längerer Materialtext.")).not.toBeInTheDocument();
+    expect(props.onOpenContextReference).not.toHaveBeenCalled();
+    expect(props.onToggleContextModuleMaterial).toHaveBeenCalledWith("module-1", "material:material-1");
+    expect(firstMaterial).toHaveAttribute("aria-expanded", "false");
     expect(within(context).queryByText("Material · Aktuelles Modul")).not.toBeInTheDocument();
     expect(within(context).queryByRole("button", { name: /anheften|lösen/i })).not.toBeInTheDocument();
     expect(within(context).queryByText("Material suchen")).not.toBeInTheDocument();
@@ -517,6 +518,29 @@ describe("LearnerContentWorkspace", () => {
     const source = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "LearnerContentWorkspace.svelte"), "utf8");
 
     expect(source).toContain("onProgressPersisted?.(task.id, submission)");
+  });
+
+  it.each(["native", "visual"] as const)("keeps the %s work surface and input during material disclosure", async (kind) => {
+    const contentGroups = structuredClone(groups);
+    const task = contentGroups[0].items[2].task!;
+    task.kind = kind;
+    const props = { ...baseProps(), contentGroups, mode: "working" as const,
+      activeTaskKey: "task:task-1", activeEditorMode: kind === "visual" ? "upload" as const : "text" as const };
+    const { rerender } = render(LearnerContentWorkspace, props);
+    const work = screen.getByRole("main", { name: "Bearbeitung" });
+    const input = work.querySelector(kind === "visual" ? 'input[type="file"]' : 'textarea');
+    expect(input).not.toBeNull();
+    if (kind === "native") await fireEvent.input(input!, { target: { value: "Mein Entwurf." } });
+    if (kind === "visual") await fireEvent.change(input!, { target: { files: [new File(["image"], "entwurf.png", { type: "image/png" })] } });
+    for (const keys of [["material:material-1"], []]) {
+      await rerender({ ...props, expandedModuleMaterialKeys: { "module-1": keys } });
+      expect(screen.getByRole("main", { name: "Bearbeitung" })).toBe(work);
+      expect(work.contains(input)).toBe(true);
+      if (kind === "native") expect(input).toHaveValue("Mein Entwurf.");
+      if (kind === "visual") expect(within(work).getByText("entwurf.png")).toBeVisible();
+    }
+    const ids = Array.from(document.querySelectorAll("[id]"), (node) => node.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("keeps task and material surfaces mounted while changing the compact view", async () => {

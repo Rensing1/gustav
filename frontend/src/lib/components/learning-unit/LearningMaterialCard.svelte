@@ -7,12 +7,15 @@
     domId = undefined,
     contextLabel = null,
     expanded = true,
+    embedded = false,
     onToggle = null
   }: {
     material: LearningMaterial;
     domId?: string;
     contextLabel?: string | null;
     expanded?: boolean;
+    /** Reuse the viewer when the surrounding navigation already owns the title. */
+    embedded?: boolean;
     onToggle?: (() => void) | null;
   } = $props();
 
@@ -42,31 +45,33 @@
     simulationRunning = false;
   }
 
-  const bodyId = $derived(`material-body-${material.id}`);
+  const bodyId = $derived(domId ? `${domId}-body` : `material-body-${material.id}`);
 </script>
 
-<article class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--material" id={domId}>
-  <button
-    class:learning-work-item__toggle--collapsed={!expanded}
-    class="learning-work-item__toggle"
-    type="button"
-    title={material.title}
-    aria-expanded={expanded}
-    aria-controls={bodyId}
-    onclick={() => onToggle?.()}
-  >
-    <div class="learning-material-card__header-inner">
-      <div class="learning-work-item__header">
-        <span class="learning-work-item__title">{material.title}</span>
+<article class:learning-work-item--embedded={embedded} class:learning-work-item--collapsed={!expanded} class="learning-work-item learning-work-item--material" id={domId}>
+  {#if !embedded}
+    <button
+      class:learning-work-item__toggle--collapsed={!expanded}
+      class="learning-work-item__toggle"
+      type="button"
+      title={material.title}
+      aria-expanded={expanded}
+      aria-controls={bodyId}
+      onclick={() => onToggle?.()}
+    >
+      <div class="learning-material-card__header-inner">
+        <div class="learning-work-item__header">
+          <span class="learning-work-item__title">{material.title}</span>
 
-        <span class:learning-work-item__toggle-icon--expanded={expanded} class="learning-work-item__toggle-icon" aria-hidden="true">
-          <svg viewBox="0 0 20 20">
-            <path d="M6.25 8.25 10 12l3.75-3.75" />
-          </svg>
-        </span>
+          <span class:learning-work-item__toggle-icon--expanded={expanded} class="learning-work-item__toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <path d="M6.25 8.25 10 12l3.75-3.75" />
+            </svg>
+          </span>
+        </div>
       </div>
-    </div>
-  </button>
+    </button>
+  {/if}
 
   {#if expanded}
     <div class="learning-work-item__body" id={bodyId}>
@@ -111,7 +116,7 @@
         {:else}
           <section class="learning-material-card__support learning-material-card__support--open">
             {#if hasPreviewUrl() && material.mime_type?.startsWith("image/")}
-              <img alt="Materialvorschau" class="learning-material-file__image" loading="lazy" src={material.file_url ?? undefined} />
+              <img alt={material.alt_text?.trim() || "Materialvorschau"} class="learning-material-file__image" loading="lazy" src={material.file_url ?? undefined} />
             {:else if hasPreviewUrl() && material.mime_type === "application/pdf"}
               <iframe
                 class="learning-material-file__frame"
@@ -128,6 +133,9 @@
             {/if}
             {#if hasPreviewUrl() && showsInlinePreview()}
               <a class="learning-work-item__link" href={material.file_url ?? undefined} target="_blank" rel="noreferrer">Separat öffnen</a>
+            {/if}
+            {#if !hasPreviewUrl()}
+              <p class="workspace-note">Datei derzeit nicht verfügbar.</p>
             {/if}
           </section>
         {/if}

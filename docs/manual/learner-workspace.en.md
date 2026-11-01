@@ -1,7 +1,7 @@
 # Learning workspace
 
 GUSTAV-Version: 0.0.4
-Last verified: 2026-10-23
+Last verified: 2026-11-01
 [Deutsche Version](learner-workspace.de.md)
 
 ![Learning workspace with material and task](../assets/readme/learner-workspace.jpg)
@@ -39,6 +39,8 @@ For H5P tasks, GUSTAV explicitly distinguishes **“Not attempted”**, **“Not
 “Bearbeitungsstand gespeichert.” confirms that your H5P work has been saved, independently of your score. Large answers also survive reloading in the same tab. Unconfirmed edits are temporarily held only in that tab and sent when the task reopens. Wait for confirmation before closing the tab. If GUSTAV shows a save error or the browser warns you, stay on the page until saving succeeds. Closing the tab or losing browser storage can discard unconfirmed edits.
 
 Module and task views share the same content navigation. On narrow screens, **„Inhalt“** (“Contents”) opens the outline. In the task workspace, materials and previous submissions share the materials area.
+
+During a task, clicking a material title in the existing left sidebar expands or collapses its content directly below that row. Materials start collapsed unless an expansion state was saved; several may remain open together. The task stays usable alongside the material, including selected H5P answers. On narrow screens, **“Aufgabe | Materialien”** switches between the preserved surfaces. Only **“Groß lesen”** opens the separate reader; previous submissions keep their existing reader. Simulations still require **“Simulation starten”**.
 
 ## How it works
 

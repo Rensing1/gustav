@@ -3,6 +3,7 @@
   import LearningCriteriaDetails from "$lib/components/learning-unit/LearningCriteriaDetails.svelte";
   import LearningDialogTranscriptDocument from "$lib/components/learning-unit/LearningDialogTranscriptDocument.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
+  import LearningMaterialCard from "./LearningMaterialCard.svelte";
   import type { LearningMaterial, LearningSubmission } from "$lib/types/learning";
 
   let {
@@ -168,6 +169,8 @@
         <div class="learner-reference-document__prose markdown-prose">
           {@html renderMarkdown(material.body_md ?? "")}
         </div>
+      {:else if material?.kind === "simulation"}
+        <LearningMaterialCard {material} embedded domId={`reference-simulation-${safeKey}`} />
       {:else if material?.kind === "file"}
         <section class="learner-reference-document__file">
           {#if material.file_url && isImageMime(material.mime_type)}

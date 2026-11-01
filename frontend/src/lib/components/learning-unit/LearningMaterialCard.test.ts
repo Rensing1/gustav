@@ -10,6 +10,21 @@ import { readWorkspaceCssBundle } from "$lib/styles/test-css-bundle";
 import LearningMaterialCard from "./LearningMaterialCard.svelte";
 
 describe("LearningMaterialCard", () => {
+  it("reuses the viewer without a duplicate heading and with a unique body ID when embedded", () => {
+    const material = { id: "shared", title: "Quelle", kind: "markdown" as const, body_md: "Lesbarer Inhalt." };
+    const { container } = render(LearningMaterialCard, { material, embedded: true, domId: "task-context-shared" });
+    expect(screen.queryByRole("button", { name: "Quelle" })).toBeNull();
+    expect(screen.getByText("Lesbarer Inhalt.")).toBeVisible();
+    expect(container.querySelector(".learning-work-item__body")).toHaveAttribute("id", "task-context-shared-body");
+  });
+
+  it("explains missing file URLs instead of presenting a broken preview", () => {
+    render(LearningMaterialCard, { material: { id: "missing", title: "Fehlende Datei", kind: "file", mime_type: "image/png" }, embedded: true });
+    expect(screen.getByText("Datei derzeit nicht verfügbar.")).toBeVisible();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
   it("starts, resets and closes simulations only after an explicit action", async () => {
     render(LearningMaterialCard, {
       props: {

@@ -546,12 +546,8 @@
   }
 
   function toggleContextModuleMaterial(moduleId: string, itemKey: string) {
-    const moduleMaterialKeys = contextModuleOptions()
-      .find((module) => module.id === moduleId)
-      ?.items.filter((item) => item.kind === "material")
-      .map((item) => item.key) ?? [];
     const storedKeys = learnerWorkspace.context.expandedModuleMaterialKeys[moduleId];
-    const expandedKeys = storedKeys ?? moduleMaterialKeys.slice(0, 1);
+    const expandedKeys = storedKeys ?? [];
     const nextKeys = expandedKeys.includes(itemKey)
       ? expandedKeys.filter((key) => key !== itemKey)
       : [...expandedKeys, itemKey];
@@ -1363,8 +1359,6 @@
     }
 
     if (selectingContext && learnerWorkspace.activeTask) {
-      const firstMaterialKey = moduleContentItems(moduleCache[moduleId] ?? null)
-        .find((item) => item.kind === "material")?.key;
       const task = learnerWorkspace.activeTask;
       setLearnerWorkspaceState({
         ...learnerWorkspace,
@@ -1380,7 +1374,7 @@
           ],
           expandedModuleMaterialKeys: {
             ...learnerWorkspace.context.expandedModuleMaterialKeys,
-            [moduleId]: firstMaterialKey ? [firstMaterialKey] : []
+            [moduleId]: learnerWorkspace.context.expandedModuleMaterialKeys[moduleId] ?? []
           },
           focusedModuleId: moduleId
         }

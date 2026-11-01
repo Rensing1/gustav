@@ -563,53 +563,55 @@ describe("LearningDialogWorkspace", () => {
 
   it("shows materials from opened modules in the shared task context without pinning", async () => {
     const onOpenContext = vi.fn();
+    const onToggleContextMaterial = vi.fn();
     const onCloseContextModule = vi.fn();
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ session: answeredSession() })));
-    render(LearningDialogWorkspace, {
-      props: {
-        learnerSub: "student-1",
-        courseId: "course-1",
-        task: dialogTask,
-        contextModules: [
-          {
-            id: "module-current",
-            title: "Grundlagen",
-            current: true,
-            closable: false,
-            loaded: true,
-            loading: false,
-            error: null,
-            items: [{
-              key: "material:source",
-              kind: "material",
+    const fetchMock = vi.fn(async () => jsonResponse({ session: answeredSession() }));
+    vi.stubGlobal("fetch", fetchMock);
+    const props = {
+      learnerSub: "student-1",
+      courseId: "course-1",
+      task: dialogTask,
+      contextModules: [
+        {
+          id: "module-current",
+          title: "Grundlagen",
+          current: true,
+          closable: false,
+          loaded: true,
+          loading: false,
+          error: null,
+          items: [{
+            key: "material:source",
+            kind: "material" as const,
+            title: "Lange Quelle",
+            position: 1,
+            contextLabel: "Grundlagen",
+            moduleId: "module-current",
+            material: {
+              id: "source",
               title: "Lange Quelle",
-              position: 1,
-              contextLabel: "Grundlagen",
-              moduleId: "module-current",
-              material: {
-                id: "source",
-                title: "Lange Quelle",
-                kind: "markdown",
-                body_md: "Ein langer Quellentext."
-              }
-            }]
-          },
-          {
-            id: "module-extra",
-            title: "Vertiefung",
-            current: false,
-            closable: true,
-            loaded: true,
-            loading: false,
-            error: null,
-            items: []
-          }
-        ],
-        expandedContextModuleIds: ["module-extra"],
-        onOpenContext,
-        onCloseContextModule
-      }
-    });
+              kind: "markdown" as const,
+              body_md: "Ein langer Quellentext."
+            }
+          }]
+        },
+        {
+          id: "module-extra",
+          title: "Vertiefung",
+          current: false,
+          closable: true,
+          loaded: true,
+          loading: false,
+          error: null,
+          items: []
+        }
+      ],
+      expandedContextModuleIds: ["module-extra"],
+      onOpenContext,
+      onToggleContextMaterial,
+      onCloseContextModule
+    };
+    const { rerender } = render(LearningDialogWorkspace, { props });
 
     const context = await screen.findByRole("complementary", { name: "Aufgabe und Kontext" });
     const outline = within(context).getByRole("complementary", { name: "Inhalt" });
@@ -617,7 +619,16 @@ describe("LearningDialogWorkspace", () => {
     expect(within(context).queryByText("Angeheftet")).not.toBeInTheDocument();
     expect(within(context).queryByText("Material suchen")).not.toBeInTheDocument();
     await fireEvent.click(within(outline).getByRole("button", { name: /Lange Quelle/ }));
-    expect(onOpenContext).toHaveBeenCalledWith("material:source");
+    expect(onToggleContextMaterial).toHaveBeenCalledWith("module-current", "material:source");
+    expect(onOpenContext).not.toHaveBeenCalled();
+    const input = screen.getByLabelText(/Deine Antwort/);
+    await fireEvent.input(input, { target: { value: "Mein Gedanke bleibt erhalten." } });
+    const fetchCount = fetchMock.mock.calls.length;
+    await rerender({ ...props, expandedModuleMaterialKeys: { "module-current": ["material:source"] } });
+    expect(within(outline).getByText("Ein langer Quellentext.")).toBeVisible();
+    expect(screen.getByLabelText(/Deine Antwort/)).toBe(input);
+    expect(input).toHaveValue("Mein Gedanke bleibt erhalten.");
+    expect(fetchMock.mock.calls).toHaveLength(fetchCount);
   });
 
   it("does not render the removed source picker in the dialog sidebar", async () => {

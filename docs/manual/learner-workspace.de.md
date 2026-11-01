@@ -1,7 +1,7 @@
 # Lernraum
 
 GUSTAV-Version: 0.0.4
-Zuletzt geprüft: 2026-10-23
+Zuletzt geprüft: 2026-11-01
 [English version](learner-workspace.en.md)
 
 ![Lernraum mit Material und Aufgabe](../assets/readme/learner-workspace.jpg)
@@ -31,6 +31,8 @@ Der Lernraum ist die zentrale Arbeitsfläche der Lernenden. Er hält Kurs, Lernw
 Lernende sehen nur eigene aktive Kurse, zugeordnete Lerneinheiten und zugängliche Inhalte. Im modularen Graphen bleiben auch gesperrte Lernschritte als Orientierung sichtbar, können aber nicht geöffnet werden. Offene und erledigte Knoten zeigen den individuellen Lernstand, nicht den Stand der ganzen Klasse.
 
 Materialien, Aufgabe, eigene frühere Abgaben und Rückmeldungen werden kontextbezogen dargestellt. Interne technische IDs, Musterlösungen, Kriterien und Lehrkraft-Kontext werden nicht als versteckte Hilfen ausgeliefert.
+
+Während einer Aufgabe klappt ein Klick auf einen Materialtitel in der bestehenden linken Seitenleiste den Inhalt direkt darunter auf oder zu. Ohne gespeicherten Aufklappzustand sind die Materialien zunächst geschlossen; mehrere dürfen gleichzeitig offen bleiben. Die Aufgabe bleibt daneben bedienbar, einschließlich gewählter H5P-Antworten. Auf schmalen Bildschirmen wechselt **„Aufgabe | Materialien“** zwischen den erhalten bleibenden Arbeitsflächen. Nur **„Groß lesen“** öffnet die gesonderte Großansicht; frühere eigene Abgaben behalten ihren bisherigen Leser. Simulationen benötigen auch im aufgeklappten Material ausdrücklich **„Simulation starten“**.
 
 Bei H5P-Aufgaben unterscheidet GUSTAV ausdrücklich zwischen **„Noch nicht bearbeitet“**, **„Noch nicht abgeschlossen“** und **„Abgeschlossen“**. Abgeschlossen ist eine H5P-Aufgabe erst, wenn mindestens einmal die volle Punktzahl erreicht wurde. Der zusätzlich angezeigte Punktestand stammt immer aus dem neuesten Versuch; ein späterer Teilversuch nimmt einen früher erreichten Abschluss nicht zurück.
 

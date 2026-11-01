@@ -4,6 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 import LearningReferenceDocument from "./LearningReferenceDocument.svelte";
 
 describe("LearningReferenceDocument", () => {
+  it("keeps simulation material usable in the explicit reader with the existing start controls", async () => {
+    render(LearningReferenceDocument, { referenceKey: "material:sim", label: "Material", title: "Simulation", readerMode: true,
+      material: { id: "sim", title: "Simulation", kind: "simulation", body_md: "Erkunde das Modell.", simulation_url: "/simulation" } });
+    expect(screen.getByText("Erkunde das Modell.")).toBeVisible();
+    expect(document.querySelector("iframe")).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Simulation starten" }));
+    expect(screen.getByTitle("Simulation Simulation")).toHaveAttribute("sandbox", "allow-scripts");
+  });
+
   it("renders an accessible, collapsible material document", async () => {
     const onToggle = vi.fn();
     const onOpenReader = vi.fn();

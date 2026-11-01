@@ -673,9 +673,7 @@ Bilder erscheinen klein und unverzerrt; PDFs und andere Dateien beginnen mit tat
   werden ausschließlich über `Zum Lernpfad` geöffnet. Währenddessen bleibt die
   Aufgabenarbeitsfläche montiert und wird nur für Tastatur und Screenreader
   verborgen. Die Auswahl eines Moduls führt direkt zur Aufgabe zurück.
-- Beim ersten Öffnen eines Moduls ist dessen erstes Material geöffnet. Danach
-  dürfen mehrere Dokumente gleichzeitig vollständig im gemeinsamen
-  Materialscrollbereich geöffnet bleiben. Wiederholte Typ- und Herkunftsmarker
+- Im Aufgabenraum sind Materialien ohne gespeicherten Aufklappzustand zunächst geschlossen. Die vorhandene Materialzeile klappt den vollständigen Inhalt direkt darunter auf oder zu; die Bearbeitung bleibt daneben bedienbar. Bewusst gespeicherte Offenlegungen bleiben erhalten, und mehrere Dokumente dürfen gleichzeitig vollständig im gemeinsamen Materialscrollbereich geöffnet bleiben. Wiederholte Typ- und Herkunftsmarker
   in jeder Dokumentzeile sind zu vermeiden.
 - Der Materialbereich visualisiert seine Hierarchie als flachen Baum statt als
   Sammlung verschachtelter Karten: Module bilden die oberste Ebene,
@@ -685,8 +683,7 @@ Bilder erscheinen klein und unverzerrt; PDFs und andere Dateien beginnen mit tat
   dafür nicht zulässig.
 - Offenlegungschevrons stehen links vor dem Titel und drehen sich im geöffneten
   Zustand. Rechts stehen ausschließlich Aktionen, die zur jeweiligen Ebene
-  gehören: `Groß lesen` an Dokumenten und `Modul schließen` an zusätzlichen
-  Modulen. `Eigene Abgaben` besitzt keine konkurrierende Nebenaktion.
+  gehören: `Modul schließen` an zusätzlichen Modulen. `Groß lesen` bleibt als gesonderte Aktion am aufgeklappten Dokument erreichbar. `Eigene Abgaben` besitzt keine konkurrierende Nebenaktion.
 - Unter `32rem` Komponentenbreite wird die Einrückung verdichtet. Titel dürfen
   mehrzeilig werden, während Offenlegungen und Symbolaktionen mindestens 44
   Pixel hohe Berührungsflächen behalten und keinen horizontalen Überlauf
@@ -875,7 +872,7 @@ Die Modulnavigation folgt der Reihenfolge der Leseansicht: Materialien, dann Auf
 Bis einschließlich 64 rem startet die Navigation geschlossen als kompakte Zeile „Inhalt“ mit aktuellem Modulnamen. Nach Auswahl eines Eintrags schließt sie und fokussiert den Zielinhalt. Auf größeren Ansichten bleibt die Navigation sichtbar. Zielpositionen berücksichtigen die feste Kopfzeile, Einträge und Gruppen bleiben mindestens 44 px hoch.
 
 ### Gemeinsame Seitennavigation
-Modulansicht und Aufgabenräume verwenden dieselbe `WorkspaceOutline` für Modulgruppen, Materialzeilen, Symbole und aktive Auswahl. Dialog-, Text- und Dateiaufgaben binden sie über `LearnerTaskContext` ein. Materialien stehen vor eigenen Abgaben. Im Aufgabenraum öffnet die Auswahl den gemeinsamen Referenzleser; die Rückkehr führt zur laufenden Bearbeitung. Auf schmalen Bildschirmen bleibt die Navigation im vorhandenen Materialien-Bereich direkt sichtbar, ohne eine zusätzliche Einklappebene. Dialogspezifische Layoutregeln dürfen keine eigene Navigationsoptik erzeugen.
+Modulansicht und Aufgabenräume verwenden dieselbe `WorkspaceOutline` für Modulgruppen, Materialzeilen, Symbole und aktive Auswahl. Dialog-, Text- und Dateiaufgaben binden sie über `LearnerTaskContext` ein. Materialien stehen vor eigenen Abgaben. Im Aufgabenraum klappt ein Materialklick den Inhalt unmittelbar unter derselben Zeile auf oder zu. Es gibt keine zweite Materialliste und keine zusätzliche Titelzeile. Die gesonderte Aktion `Groß lesen` öffnet den gemeinsamen Referenzleser; eigene frühere Abgaben öffnen weiterhin diesen Leser. Materialaktionen erhalten die laufende Bearbeitungsinstanz und Eingaben. Auf schmalen Bildschirmen bleibt die Navigation im vorhandenen Materialien-Bereich direkt sichtbar, ohne eine zusätzliche Einklappebene. Dialogspezifische Layoutregeln dürfen keine eigene Navigationsoptik erzeugen.
 
 ### Auth-Formulare
 

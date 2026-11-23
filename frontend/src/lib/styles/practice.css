@@ -528,7 +528,11 @@
     align-items: start;
   }
 
-  .practice-selection__setup {
+  .practice-selection__form--scoped {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .practice-selection__form:not(.practice-selection__form--scoped) .practice-selection__setup {
     padding-left: var(--space-6);
     border-left: 1px solid var(--color-line);
   }

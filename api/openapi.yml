@@ -3850,6 +3850,10 @@ components:
           maxItems: 50
           uniqueItems: true
           items: { $ref: '#/components/schemas/LearningPracticeStackSelection' }
+        replace_active_session_id:
+          type: string
+          format: uuid
+          description: Replace this exact active session of the authenticated learner when starting one selected stack with eligible tasks.
     LearningPracticeSessionItem:
       type: object
       additionalProperties: false
@@ -3888,7 +3892,7 @@ components:
     LearningPracticeSession:
       type: object
       additionalProperties: false
-      required: [id, mode, status, started_at, ended_at, end_reason, total_items, completed_items, current_item, summary]
+      required: [id, mode, status, started_at, ended_at, end_reason, total_items, completed_items, current_item, summary, stacks]
       properties:
         id: { type: string, format: uuid }
         mode: { type: string, enum: [due, exam] }
@@ -3898,6 +3902,9 @@ components:
         end_reason: { type: string, enum: [completed, stopped, empty], nullable: true }
         total_items: { type: integer, minimum: 0, maximum: 1000 }
         completed_items: { type: integer, minimum: 0, maximum: 1000 }
+        stacks:
+          type: array
+          items: { $ref: '#/components/schemas/LearningPracticeStackSelection' }
         current_item:
           allOf: [{ $ref: '#/components/schemas/LearningPracticeSessionItem' }]
           nullable: true
@@ -5803,7 +5810,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized401' }
         '403': { description: Student role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: A selected stack is unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '409': { description: An active session already exists, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: An active session already exists or the requested replacement is stale or has no eligible tasks, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/learning/practice/sessions/{session_id}:
     get:
       tags: [Learning]

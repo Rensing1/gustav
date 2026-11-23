@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { practiceActionUrls, type PracticeActionUrls } from "$lib/practice/practice-presentation";
   import MarkdownContent from "$lib/components/ui/MarkdownContent.svelte";
   import { practiceClassificationLabel, practiceDueLabel } from "$lib/practice/practice-presentation";
   import type { LearningPracticeAttempt, LearningPracticeSessionItem } from "$lib/types/practice";
@@ -9,7 +10,8 @@
     itemId,
     kind,
     solution,
-    nowIso
+    nowIso,
+    actionUrls = practiceActionUrls()
   }: {
     attempt: LearningPracticeAttempt;
     sessionId: string;
@@ -17,6 +19,7 @@
     kind: LearningPracticeSessionItem["kind"];
     solution: string | null;
     nowIso: string;
+    actionUrls?: PracticeActionUrls;
   } = $props();
 
   const dueLabel = $derived(practiceDueLabel(attempt.due_at, nowIso));
@@ -51,7 +54,7 @@
         <MarkdownContent class="markdown-prose" source={solution} />
       </section>
     {:else}
-      <form method="POST" action="?/solution">
+      <form method="POST" action={actionUrls.solution}>
         <input type="hidden" name="session_id" value={sessionId} />
         <input type="hidden" name="item_id" value={itemId} />
         <button class="workspace-link-action workspace-link-action--secondary" type="submit">Musterlösung ansehen</button>
@@ -59,7 +62,7 @@
     {/if}
   {/if}
 
-  <form method="POST" action="?/continue" class="practice-feedback__continue">
+  <form method="POST" action={actionUrls.continue} class="practice-feedback__continue">
     <input type="hidden" name="session_id" value={sessionId} />
     <button class="workspace-link-action workspace-link-action--primary workspace-link-action--block" type="submit">
       Weiter zur nächsten Aufgabe <span aria-hidden="true">→</span>

@@ -41,6 +41,9 @@ const PRACTICE_ERROR_MESSAGES: Record<string, string> = {
   too_many_stacks: "Bitte wähle höchstens 50 Themen aus.",
   session_item_limit_exceeded: "Diese Auswahl enthält zu viele Aufgaben. Bitte wähle weniger Themen aus.",
   practice_stack_not_found: "Mindestens ein ausgewähltes Thema ist nicht mehr verfügbar.",
+  practice_session_changed: "Die laufende Übung hat sich geändert. Prüfe deine Auswahl und starte erneut.",
+  practice_no_eligible_tasks: "Für dieses Modul sind aktuell keine Aufgaben in dieser Übungsart verfügbar.",
+  invalid_practice_replacement: "Die bisherige Übung konnte nicht gewechselt werden.",
   practice_session_active: "Du hast bereits eine aktive Übungssitzung.",
   practice_feedback_pending: "Die Rückmeldung ist noch nicht fertig.",
   practice_item_state_conflict: "Diese Aufgabe wurde bereits verarbeitet. Die Seite wird beim nächsten Aufruf aktualisiert.",
@@ -52,3 +55,17 @@ const PRACTICE_ERROR_MESSAGES: Record<string, string> = {
 export function practiceErrorMessage(code: string): string {
   return PRACTICE_ERROR_MESSAGES[code] ?? PRACTICE_ERROR_MESSAGES.practice_request_failed;
 }
+
+export function practiceActionUrls(query = "") {
+  const suffix = query ? `&${query}` : "";
+  return {
+    start: `?/start${suffix}`,
+    attempt: `?/attempt${suffix}`,
+    skip: `?/skip${suffix}`,
+    continue: `?/continue${suffix}`,
+    solution: `?/solution${suffix}`,
+    end: `?/end${suffix}`
+  };
+}
+
+export type PracticeActionUrls = ReturnType<typeof practiceActionUrls>;

@@ -223,8 +223,61 @@ test("@feature-acceptance teacher authors and learner completes native repetitio
       timeout: 45_000,
       intervals: [1000]
     }).toBe(404);
+
+    await test.step("Switch from a mixed session through the module graph", async () => {
+      await verifyModuleSwitch(teacher.page, learner.page);
+    });
   } finally {
     await learner.context.close();
     await teacher.context.close();
   }
 });
+
+async function verifyModuleSwitch(teacher: Page, learner: Page) {
+  const a = await seedLearnerPracticeCourse(teacher, learner, "Modulwechsel A", true, "Aufgabe aus Modul A");
+  const b = await seedLearnerPracticeCourse(teacher, learner, "Modulwechsel B", true, "Aufgabe aus Modul B");
+  const api = "/api/learning/practice/sessions";
+  const stacks = [a, b].map(({ courseId, practiceModuleId }) => ({
+    course_id: courseId, practice_module_id: practiceModuleId
+  }));
+  const mixedResponse = await learner.request.post(api, {
+    headers: apiHeaders("/learning/practice"),
+    data: { mode: "exam", stacks }
+  });
+  expect(mixedResponse.status()).toBe(201);
+  let mixed = await mixedResponse.json();
+  if (mixed.current_item.practice_module_id === a.practiceModuleId) {
+    const response = await learner.request.post(`${api}/${mixed.id}/items/${mixed.current_item.id}/skip`, {
+      headers: apiHeaders("/learning/practice")
+    });
+    expect(response.ok()).toBe(true);
+    mixed = await response.json();
+  }
+  expect(mixed.current_item.practice_module_id).toBe(b.practiceModuleId);
+
+  const graph = `/learning/courses/${b.courseId}/units/${b.unitId}`;
+  const openModule = async () => {
+    await learner.goto(graph);
+    await learner.getByRole("button", { name: /Wiederholen/ }).click();
+  };
+  await openModule();
+  await expect(learner.getByRole("button", { name: "1 Aufgabe starten" })).toBeVisible();
+  await expect(learner.getByText("Aufgabe aus Modul B", { exact: true })).toHaveCount(0);
+  expect((await (await learner.request.get(`${api}/active`)).json()).id).toBe(mixed.id);
+
+  await learner.getByRole("button", { name: "1 Aufgabe starten" }).click();
+  await expect(learner.getByText("Aufgabe aus Modul B", { exact: true })).toBeVisible();
+  const own = await (await learner.request.get(`${api}/active`)).json();
+  expect(own.id).not.toBe(mixed.id);
+  expect(own.stacks).toEqual([stacks[1]]);
+  expect(own.total_items).toBe(1);
+  expect((await (await learner.request.get(`${api}/${mixed.id}`)).json()).end_reason).toBe("stopped");
+
+  await openModule();
+  await expect(learner.getByText("Aufgabe aus Modul B", { exact: true })).toBeVisible();
+  const resumed = await (await learner.request.get(`${api}/active`)).json();
+  expect(resumed.id).toBe(own.id);
+  expect(resumed.current_item.id).toBe(own.current_item.id);
+  await learner.getByRole("button", { name: "Aufgabe überspringen" }).click();
+  await expect(learner).toHaveURL(/\/summary$/);
+}

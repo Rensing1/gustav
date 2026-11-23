@@ -111,3 +111,19 @@ def test_h5p_completion_rejects_invalid_scores_or_missing_token() -> None:
         service.complete_h5p_attempt(
             "student-1", "session-1", "item-1", score_raw=2, score_max=1, completion_token="token"
         )
+
+
+def test_replacement_identifies_one_target_stack() -> None:
+    repo = Repo()
+    service = PracticeService(repo)
+    previous = "11111111-1111-1111-1111-111111111111"
+    target = {"course_id": "course-1", "practice_module_id": "module-1"}
+    service.create_session("student-1", mode="due", stacks=[target], replace_active_session_id=previous)
+    assert repo.created["replace_active_session_id"] == previous
+
+    with pytest.raises(ValueError, match="invalid_practice_replacement"):
+        service.create_session(
+            "student-1", mode="due",
+            stacks=[target, {**target, "practice_module_id": "module-2"}],
+            replace_active_session_id=previous,
+        )

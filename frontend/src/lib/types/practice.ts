@@ -1,9 +1,12 @@
-export type LearningPracticeStack = {
+export type LearningPracticeStackSelection = {
   course_id: string;
+  practice_module_id: string;
+};
+
+export type LearningPracticeStack = LearningPracticeStackSelection & {
   course_title: string;
   unit_id: string;
   unit_title: string;
-  practice_module_id: string;
   module_title: string;
   task_count: number;
   due_tasks_count: number;
@@ -48,6 +51,7 @@ export type LearningPracticeSession = {
   total_items: number;
   completed_items: number;
   current_item: LearningPracticeSessionItem | null;
+  stacks: LearningPracticeStackSelection[];
   summary: LearningPracticeSessionSummary | null;
 };
 

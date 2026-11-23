@@ -8,14 +8,37 @@ import {
   readTypedJsonOrNull
 } from "$lib/server/api";
 import { currentPath, requireParentSpaceBootstrap } from "$lib/server/guards";
-import type { LearningPracticeAttempt, LearningPracticeSession, LearningPracticeStack } from "$lib/types/practice";
-import { practiceErrorMessage } from "$lib/practice/practice-presentation";
+import type { LearningPracticeAttempt, LearningPracticeSession, LearningPracticeStack, LearningPracticeStackSelection } from "$lib/types/practice";
+import { practiceActionUrls, practiceErrorMessage } from "$lib/practice/practice-presentation";
 
-export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
+function moduleContext(url: URL) {
+  const courseId = url.searchParams.get("course_id");
+  const moduleId = url.searchParams.get("practice_module_id");
+  if (courseId === null && moduleId === null) return null;
+
+  const query = new URLSearchParams();
+  if (courseId !== null) query.set("course_id", courseId);
+  if (moduleId !== null) query.set("practice_module_id", moduleId);
+  return {
+    query: query.toString(),
+    selection: courseId && moduleId ? { course_id: courseId, practice_module_id: moduleId } : null
+  };
+}
+
+function sameStack(stack: LearningPracticeStackSelection, other: LearningPracticeStackSelection | null) {
+  return stack.course_id === other?.course_id && stack.practice_module_id === other.practice_module_id;
+}
+
+function practicePageUrl(url: URL) {
+  const context = moduleContext(url);
+  return context ? `/learning/practice?${context.query}` : "/learning/practice";
+}
+
+export const load = (async ({ fetch, cookies, parent, url }) => {
   const authRedirectPath = currentPath(url);
   await requireParentSpaceBootstrap(parent, authRedirectPath, "learning");
   let breadcrumbs = [{ label: "Lernraum", href: "/learning" }, { label: "Üben" }];
-  const activeSession = await readTypedJsonOrNull<LearningPracticeSession>(
+  const session = await readTypedJsonOrNull<LearningPracticeSession>(
     fetch,
     cookies,
     "/api/learning/practice/sessions/active"
@@ -26,6 +49,15 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
       "/api/learning/practice/stacks",
       { authRedirectPath }
     );
+  const context = moduleContext(url);
+  const requestedStack = context
+    ? stackResponse.stacks.find(stack => sameStack(stack, context.selection))
+    : undefined;
+  const matchesContext = session?.stacks?.length === 1 && context && sameStack(session.stacks[0], context.selection);
+  // An empty matching session still needs its existing exit after task removal.
+  const activeSession = context && !(matchesContext && (requestedStack || !session?.current_item))
+    ? null
+    : session;
   const attemptId = activeSession?.current_item?.latest_attempt_id;
   const attempt = attemptId
     ? await readTypedJsonOrNull<LearningPracticeAttempt>(
@@ -34,15 +66,10 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
         `/api/learning/practice/attempts/${encodeURIComponent(attemptId)}`
       )
     : null;
-  const requestedStack = `${url.searchParams.get("course_id") ?? ""}:${url.searchParams.get("practice_module_id") ?? ""}`;
-  const selectedStack = stackResponse.stacks.some(
-    (stack) => `${stack.course_id}:${stack.practice_module_id}` === requestedStack
-  ) ? requestedStack : null;
-  // Session context wins over stale query parameters, including after action redirects.
   const currentItem = activeSession?.current_item;
-  const contextStack = currentItem
-    ? stackResponse.stacks.find(stack => stack.course_id === currentItem.course_id && stack.practice_module_id === currentItem.practice_module_id)
-    : stackResponse.stacks.find(stack => `${stack.course_id}:${stack.practice_module_id}` === selectedStack);
+  const contextStack = context
+    ? requestedStack
+    : currentItem && stackResponse.stacks.find(stack => sameStack(stack, currentItem));
   if (contextStack) {
     const courseHref = `/learning/courses/${encodeURIComponent(contextStack.course_id)}`;
     breadcrumbs = [
@@ -57,15 +84,17 @@ export const load: PageServerLoad = async ({ fetch, cookies, parent, url }) => {
     breadcrumbs,
     hidePageHeading: true,
     pageTitle: "Üben",
-    stacks: stackResponse.stacks,
-    selectedStack,
+    stacks: context ? (requestedStack ? [requestedStack] : []) : stackResponse.stacks,
+    moduleScoped: context !== null,
+    actionUrls: practiceActionUrls(context?.query),
+    replaceActiveSessionId: requestedStack && !activeSession ? session?.id ?? null : null,
     selectedMode,
     activeSession,
     attempt,
     attemptKey: randomUUID(),
     nowIso: new Date().toISOString()
   };
-};
+}) satisfies PageServerLoad;
 
 async function mutate(
   event: Parameters<NonNullable<Actions[string]>>[0],
@@ -91,7 +120,7 @@ async function mutate(
   const session = (await response.json()) as LearningPracticeSession;
   const destination = session.status === "ended"
     ? `/learning/practice/sessions/${encodeURIComponent(session.id)}/summary`
-    : "/learning/practice";
+    : practicePageUrl(event.url);
   throw redirect(303, destination);
 }
 
@@ -99,6 +128,17 @@ export const actions: Actions = {
   start: async (event) => {
     const form = await event.request.formData();
     const mode = String(form.get("mode") ?? "due");
+    const context = moduleContext(event.url);
+    if (context) {
+      if (!context.selection) {
+        return fail(404, { practice: { error: "Dieses Übungsmodul ist nicht verfügbar." } });
+      }
+      return await mutate(event, "/api/learning/practice/sessions", {
+        mode,
+        stacks: [context.selection],
+        replace_active_session_id: form.get("replace_active_session_id") || undefined
+      });
+    }
     const stacks = form.getAll("stack").map((value) => {
       const [course_id, practice_module_id] = String(value).split(":", 2);
       return { course_id, practice_module_id };
@@ -143,7 +183,7 @@ export const actions: Actions = {
       return fail(response.status, { practice: { error: practiceErrorMessage(error) } });
     }
     await response.json();
-    throw redirect(303, "/learning/practice");
+    throw redirect(303, practicePageUrl(event.url));
   },
   solution: async (event) => {
     const form = await event.request.formData();

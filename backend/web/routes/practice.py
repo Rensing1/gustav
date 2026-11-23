@@ -9,7 +9,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from backend.learning.practice.repo_db import DBPracticeRepo
-from backend.learning.practice.service import ActivePracticeSessionError, PracticeService
+from backend.learning.practice.service import (
+    ActivePracticeSessionError,
+    PracticeReplacementConflict,
+    PracticeService,
+)
 from backend.web.routes.security import _is_same_origin
 
 practice_router = APIRouter(tags=["Learning"])
@@ -99,9 +103,14 @@ async def create_practice_session(request: Request):
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError("invalid_practice_payload")
+        if "replace_active_session_id" in payload and not isinstance(payload["replace_active_session_id"], str):
+            raise ValueError("invalid_practice_replacement")
         session = _service().create_session(
-            student_sub or "", mode=payload.get("mode"), stacks=payload.get("stacks")
+            student_sub or "", mode=payload.get("mode"), stacks=payload.get("stacks"),
+            replace_active_session_id=payload.get("replace_active_session_id"),
         )
+    except PracticeReplacementConflict as exc:
+        return _error(409, str(exc))
     except ActivePracticeSessionError as exc:
         return _error(409, "practice_session_active", active_session_id=exc.session_id)
     except LookupError:

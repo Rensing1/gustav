@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { practiceActionUrls, type PracticeActionUrls } from "$lib/practice/practice-presentation";
   import PracticeH5PTask from "$lib/components/PracticeH5PTask.svelte";
   import StatusMessage from "$lib/components/ui/StatusMessage.svelte";
   import { modalFocus } from "$lib/components/ui/modal-focus";
@@ -11,13 +12,15 @@
     attempt,
     attemptKey,
     solution,
-    nowIso
+    nowIso,
+    actionUrls = practiceActionUrls()
   }: {
     session: LearningPracticeSession;
     attempt: LearningPracticeAttempt | null;
     attemptKey: string;
     solution: string | null;
     nowIso: string;
+    actionUrls?: PracticeActionUrls;
   } = $props();
 
   let endDialogOpen = $state(false);
@@ -82,7 +85,7 @@
                   autoDismissMs={null}
                 />
               {/if}
-              <form method="POST" action="?/attempt" class="practice-answer-form">
+              <form method="POST" action={actionUrls.attempt} class="practice-answer-form">
                 <input type="hidden" name="session_id" value={session.id} />
                 <input type="hidden" name="item_id" value={item.id} />
                 <input type="hidden" name="idempotency_key" value={attemptKey} />
@@ -94,7 +97,7 @@
                   <button
                     class="workspace-link-action workspace-link-action--secondary"
                     type="submit"
-                    formaction="?/skip"
+                    formaction={actionUrls.skip}
                     formnovalidate
                   >Aufgabe überspringen</button>
                   <button class="workspace-link-action workspace-link-action--primary" type="submit">Antwort prüfen</button>
@@ -118,6 +121,7 @@
                     kind={item.kind}
                     solution={null}
                     {nowIso}
+                    {actionUrls}
                   />
                 {:else}
                   <section class="practice-feedback" aria-live="polite">
@@ -126,7 +130,7 @@
                       title="Ergebnis gespeichert"
                       description="Die ausführliche Einstufung konnte nicht geladen werden. Du kannst trotzdem weitergehen."
                     />
-                    <form method="POST" action="?/continue" class="practice-feedback__continue">
+                    <form method="POST" action={actionUrls.continue} class="practice-feedback__continue">
                       <input type="hidden" name="session_id" value={session.id} />
                       <button class="workspace-link-action workspace-link-action--primary workspace-link-action--block" type="submit">
                         Weiter zur nächsten Aufgabe <span aria-hidden="true">→</span>
@@ -135,7 +139,7 @@
                   </section>
                 {/if}
               {:else}
-                <form method="POST" action="?/skip" class="practice-h5p-skip">
+                <form method="POST" action={actionUrls.skip} class="practice-h5p-skip">
                   <input type="hidden" name="session_id" value={session.id} />
                   <input type="hidden" name="item_id" value={item.id} />
                   <button class="workspace-link-action workspace-link-action--secondary" type="submit">Aufgabe überspringen</button>
@@ -150,6 +154,7 @@
               kind={item.kind}
               {solution}
               {nowIso}
+              {actionUrls}
             />
           {:else}
             <StatusMessage
@@ -167,7 +172,7 @@
   {#if endDialogOpen}
     <div class="dialog-backdrop">
       <div use:modalFocus={() => endDialogOpen = false} role="dialog" aria-modal="true" class="practice-end-dialog" aria-labelledby="practice-end-dialog-title">
-        <form method="POST" action="?/end" class="practice-end-dialog__card">
+        <form method="POST" action={actionUrls.end} class="practice-end-dialog__card">
           <input type="hidden" name="session_id" value={session.id} />
           <p class="practice-eyebrow">Sitzung beenden</p>
           <h2 id="practice-end-dialog-title">Möchtest du die Übung jetzt beenden?</h2>
@@ -186,7 +191,7 @@
       <h2 id="practice-empty-session-title">Keine Aufgabe mehr verfügbar</h2>
       <p>Beende diese Sitzung, um andere Aufgaben auszuwählen.</p>
     </header>
-    <form method="POST" action="?/end" class="practice-summary__actions">
+    <form method="POST" action={actionUrls.end} class="practice-summary__actions">
       <input type="hidden" name="session_id" value={session.id} />
       <button class="workspace-link-action workspace-link-action--primary" type="submit">Sitzung beenden</button>
     </form>

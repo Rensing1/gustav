@@ -11,6 +11,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 from typing import Protocol, Sequence
+from uuid import UUID
 
 MAX_SELECTED_STACKS = 50
 MAX_SESSION_ITEMS = 1000
@@ -24,6 +25,10 @@ class ActivePracticeSessionError(RuntimeError):
         self.session_id = session_id
 
 
+class PracticeReplacementConflict(RuntimeError):
+    """Signal that the selected replacement cannot be started."""
+
+
 class PracticeRepoProtocol(Protocol):
     def list_stacks(self, *, student_sub: str) -> list[dict]: ...
 
@@ -35,6 +40,7 @@ class PracticeRepoProtocol(Protocol):
         stacks: list[dict[str, str]],
         rng: random.Random,
         max_items: int,
+        replace_active_session_id: str | None = None,
     ) -> dict: ...
 
     def get_active_session(self, *, student_sub: str) -> dict | None: ...
@@ -103,14 +109,27 @@ class PracticeService:
     def list_stacks(self, student_sub: str) -> list[dict]:
         return self.repo.list_stacks(student_sub=student_sub)
 
-    def create_session(self, student_sub: str, *, mode: object, stacks: object) -> dict:
+    def create_session(
+        self, student_sub: str, *, mode: object, stacks: object,
+        replace_active_session_id: object = None,
+    ) -> dict:
         normalized_mode = str(mode or "").strip().lower()
         if normalized_mode not in {"due", "exam"}:
             raise ValueError("invalid_practice_mode")
+        selection = _selection(stacks)
+        replacement = None
+        if replace_active_session_id is not None:
+            if not isinstance(replace_active_session_id, str) or len(selection) != 1:
+                raise ValueError("invalid_practice_replacement")
+            try:
+                replacement = str(UUID(replace_active_session_id))
+            except ValueError as exc:
+                raise ValueError("invalid_practice_replacement") from exc
         return self.repo.create_session(
             student_sub=student_sub,
             mode=normalized_mode,
-            stacks=_selection(stacks),
+            stacks=selection,
+            replace_active_session_id=replacement,
             rng=self.rng,
             max_items=MAX_SESSION_ITEMS,
         )

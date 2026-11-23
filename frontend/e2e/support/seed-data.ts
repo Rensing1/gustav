@@ -302,7 +302,8 @@ export async function seedLearnerPracticeCourse(
   teacherPage: Page,
   learnerPage: Page,
   title: string,
-  includeNativeTask = true
+  includeNativeTask = true,
+  instruction = "Erkläre, warum ein Test zuerst rot sein soll."
 ): Promise<LearnerPracticeCourse> {
   const learnerSub = await currentUserSub(learnerPage);
   const courseId = await createCourse(teacherPage, `${title} Kurs`);
@@ -323,7 +324,7 @@ export async function seedLearnerPracticeCourse(
   const sectionId = (await targetResponse.json()).section_id as string;
   if (includeNativeTask) {
     await createTask(teacherPage, unitId, sectionId, {
-      instruction_md: "Erkläre, warum ein Test zuerst rot sein soll.",
+      instruction_md: instruction,
       criteria: ["Die Antwort erklärt den Zweck eines zunächst fehlschlagenden Tests."],
       teacher_context_md: "Bewerte, ob die Rückmeldung den beobachtbaren TDD-Zyklus erklärt.",
       model_solution_md: "Ein zunächst roter Test beweist, dass er die noch fehlende Funktion wirklich prüft."

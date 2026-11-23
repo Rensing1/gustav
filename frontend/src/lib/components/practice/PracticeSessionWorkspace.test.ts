@@ -24,6 +24,7 @@ const session = {
   total_items: 2,
   completed_items: 0,
   summary: null,
+  stacks: [{ course_id: "course-1", practice_module_id: "module-1" }],
   current_item: {
     id: "item-1",
     course_id: "course-1",

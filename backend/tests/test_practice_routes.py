@@ -19,7 +19,7 @@ class Service:
     def get_active_session(self, student_sub: str):
         return None
 
-    def create_session(self, student_sub: str, *, mode: object, stacks: object):
+    def create_session(self, student_sub: str, *, mode: object, stacks: object, replace_active_session_id=None):
         return {
             "id": "11111111-1111-1111-1111-111111111111",
             "mode": mode,

@@ -23,7 +23,10 @@ from backend.learning.practice.scheduler import (
     schedule,
     scheduler_classification,
 )
-from backend.learning.practice.service import ActivePracticeSessionError
+from backend.learning.practice.service import (
+    ActivePracticeSessionError,
+    PracticeReplacementConflict,
+)
 from backend.learning.repo_db import _dsn as learning_dsn
 
 
@@ -191,17 +194,30 @@ class DBPracticeRepo:
         stacks: list[dict[str, str]],
         rng: random.Random,
         max_items: int,
+        replace_active_session_id: str | None = None,
     ) -> dict:
         with psycopg.connect(self._dsn) as conn:
             with conn.cursor() as cur:
                 self._set_student(cur, student_sub)
-                cur.execute(
-                    "select id::text from public.learning_practice_sessions where student_sub=%s and status='active'",
-                    (student_sub,),
-                )
-                active = cur.fetchone()
-                if active:
-                    raise ActivePracticeSessionError(str(active[0]))
+                if replace_active_session_id is not None:
+                    cur.execute(
+                        """
+                        select status from public.learning_practice_sessions
+                         where id=%s::uuid and student_sub=%s for update
+                        """,
+                        (replace_active_session_id, student_sub),
+                    )
+                    previous = cur.fetchone()
+                    if not previous or previous[0] != "active":
+                        raise PracticeReplacementConflict("practice_session_changed")
+                else:
+                    cur.execute(
+                        "select id::text from public.learning_practice_sessions where student_sub=%s and status='active'",
+                        (student_sub,),
+                    )
+                    active = cur.fetchone()
+                    if active:
+                        raise ActivePracticeSessionError(str(active[0]))
 
                 items: list[dict] = []
                 normalized_stacks: list[tuple[str, str]] = []
@@ -220,6 +236,11 @@ class DBPracticeRepo:
                     )
                     if len(items) > max_items:
                         raise ValueError("session_item_limit_exceeded")
+
+                if replace_active_session_id is not None:
+                    if not items:
+                        raise PracticeReplacementConflict("practice_no_eligible_tasks")
+                    self._stop_locked_session(cur, replace_active_session_id)
 
                 rng.shuffle(items)
                 status = "active" if items else "ended"
@@ -289,6 +310,19 @@ class DBPracticeRepo:
         row = cur.fetchone()
         if not row:
             return None
+        cur.execute(
+            """
+            select course_id::text, practice_module_id::text
+              from public.learning_practice_session_stacks
+             where session_id=%s::uuid
+             order by course_id, practice_module_id
+            """,
+            (session_id,),
+        )
+        stacks = [
+            {"course_id": course_id, "practice_module_id": module_id}
+            for course_id, module_id in cur.fetchall()
+        ]
         cur.execute(
             """
             select count(*)::int,
@@ -395,6 +429,7 @@ class DBPracticeRepo:
             "total_items": int(total or 0),
             "completed_items": int(completed or 0),
             "current_item": current_item,
+            "stacks": stacks,
             "summary": summary,
         }
 
@@ -1023,17 +1058,22 @@ class DBPracticeRepo:
                 if not row:
                     return None
                 if str(row[0]) == "active":
-                    cur.execute(
-                        """
-                        update public.learning_practice_session_items
-                           set status='skipped'
-                         where session_id=%s::uuid and status in ('queued', 'active', 'retry_queued')
-                        """,
-                        (session_uuid,),
-                    )
-                    cur.execute(
-                        "update public.learning_practice_sessions set status='ended', ended_at=now(), end_reason='stopped' where id=%s::uuid",
-                        (session_uuid,),
-                    )
+                    self._stop_locked_session(cur, session_uuid)
                     conn.commit()
         return self.get_session(student_sub=student_sub, session_id=session_uuid)
+
+    @staticmethod
+    def _stop_locked_session(cur, session_id: str) -> None:  # noqa: ANN001
+        """End an owned, locked session while preserving submitted attempts."""
+        cur.execute(
+            """
+            update public.learning_practice_session_items
+               set status='skipped'
+             where session_id=%s::uuid and status in ('queued', 'active', 'retry_queued')
+            """,
+            (session_id,),
+        )
+        cur.execute(
+            "update public.learning_practice_sessions set status='ended', ended_at=now(), end_reason='stopped' where id=%s::uuid",
+            (session_id,),
+        )

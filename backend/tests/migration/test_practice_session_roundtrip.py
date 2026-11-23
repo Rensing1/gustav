@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import os
 import random
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from importlib import import_module
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 
 from backend.learning.practice.repo_db import DBPracticeRepo
 from backend.learning.practice.service import ActivePracticeSessionError, PracticeService
@@ -28,7 +32,7 @@ def _app_dsn() -> str:
     return os.getenv("DATABASE_URL") or "postgresql://gustav_app:CHANGE_ME_DEV@127.0.0.1:54322/postgres"
 
 
-def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_state() -> None:
+def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_state(monkeypatch) -> None:
     require_db_or_skip()
     student = f"practice-roundtrip-{uuid4()}"
     teacher = f"teacher-{uuid4()}"
@@ -107,6 +111,64 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
         exam_session = service.create_session(student, mode="exam", stacks=selection)
         assert exam_session["total_items"] == 2
 
+        practice = import_module("backend.web.routes.practice")
+        monkeypatch.setattr(practice, "_SERVICE", service)
+        app = FastAPI()
+        app.include_router(practice.practice_router)
+
+        @app.middleware("http")
+        async def authenticate(request: Request, call_next):
+            request.state.user = {"sub": student, "role": "student"}
+            return await call_next(request)
+
+        attempt = service.create_native_attempt(
+            student, exam_session["id"], exam_session["current_item"]["id"],
+            answer_text="Antwort vor dem Wechsel", idempotency_key="before-switch",
+        )
+        payload = {
+            "mode": "exam", "stacks": selection,
+            "replace_active_session_id": exam_session["id"],
+        }
+
+        def start(body):
+            with TestClient(app) as client:
+                return client.post("/api/learning/practice/sessions", json=body, headers={"Origin": "http://testserver"})
+
+        stale = start({**payload, "replace_active_session_id": str(uuid4())})
+        assert (stale.status_code, stale.json()["detail"]) == (409, "practice_session_changed")
+        missing = start({
+            **payload,
+            "stacks": [{**selection[0], "practice_module_id": str(uuid4())}],
+        })
+        assert missing.status_code == 404
+        with psycopg.connect(_admin_dsn()) as conn:
+            conn.execute(
+                """
+                insert into public.learning_practice_states
+                  (course_id, student_sub, task_id, stability_days, interval_seconds, due_at)
+                values (%s, %s, %s, 2.0, 172800, now() + interval '2 days')
+                """,
+                (ids["course"], student, ids["task_due"]),
+            )
+        empty = start({**payload, "mode": "due"})
+        assert (empty.status_code, empty.json()["detail"]) == (409, "practice_no_eligible_tasks")
+        assert service.get_active_session(student)["id"] == exam_session["id"]
+        with psycopg.connect(_admin_dsn()) as conn:
+            conn.execute(
+                "delete from public.learning_practice_states where course_id=%s and student_sub=%s and task_id=%s",
+                (ids["course"], student, ids["task_due"]),
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(start, [payload, payload]))
+        assert sorted(response.status_code for response in results) == [201, 409]
+        previous = service.get_session(student, exam_session["id"])
+        assert previous["end_reason"] == "stopped"
+        assert service.get_attempt(student, attempt["attempt_id"])["status"] == "pending"
+        exam_session = next(response.json() for response in results if response.status_code == 201)
+        assert exam_session["stacks"] == selection
+        assert service.get_active_session(student)["id"] == exam_session["id"]
+
         with psycopg.connect(_admin_dsn()) as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -137,6 +199,7 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
     finally:
         with psycopg.connect(_admin_dsn()) as conn:
             with conn.cursor() as cur:
+                cur.execute("delete from public.learning_submissions where student_sub=%s", (student,))
                 cur.execute("delete from public.courses where id=%s", (ids["course"],))
                 cur.execute("delete from public.units where id=%s", (ids["unit"],))
             conn.commit()

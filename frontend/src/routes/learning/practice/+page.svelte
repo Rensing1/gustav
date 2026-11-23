@@ -31,20 +31,26 @@
       attemptKey={data.attemptKey}
       solution={form?.practice?.solution ?? null}
       nowIso={data.nowIso}
+      actionUrls={data.actionUrls}
     />
   {:else if data.stacks.length}
-    <PracticeStackSelector
-      stacks={data.stacks}
-      selectedStack={data.selectedStack}
-      selectedMode={data.selectedMode}
-    />
+    {#key data.moduleScoped ? data.stacks[0].course_id + ":" + data.stacks[0].practice_module_id : ""}
+      <PracticeStackSelector
+        stacks={data.stacks}
+        selectedStack={null}
+        moduleScoped={data.moduleScoped}
+        actionUrl={data.actionUrls.start}
+        replaceActiveSessionId={data.replaceActiveSessionId}
+        selectedMode={data.selectedMode}
+      />
+    {/key}
   {:else}
     <section class="practice-summary">
       <header class="practice-summary__hero" data-tone="neutral">
         <span class="practice-summary__icon" aria-hidden="true">◷</span>
         <p class="practice-eyebrow">Deine Wiederholungen</p>
-        <h2>Aktuell ist keine Übung verfügbar</h2>
-        <p>Sobald ein Übungsmodul freigeschaltet ist, erscheint es hier.</p>
+        <h2>{data.moduleScoped ? "Dieses Übungsmodul ist nicht verfügbar" : "Aktuell ist keine Übung verfügbar"}</h2>
+        {#if !data.moduleScoped}<p>Sobald ein Übungsmodul freigeschaltet ist, erscheint es hier.</p>{/if}
       </header>
       <div class="practice-summary__actions">
         <a class="workspace-link-action workspace-link-action--primary" href="/learning">Zum Lernraum</a>

@@ -625,7 +625,40 @@ def test_markdown_in_additional_file_metadata_is_literal_text() -> None:
     from backend.filius.evidence_v1 import build_evidence_markdown_v1
 
     xml = PEER2PEER_FILE_XML.replace(b"peer2peer", b"Dokumente").replace(
-        b"Nachricht.txt", b"[Plan](ziel).txt"
+        b"Nachricht.txt", b"Plan &amp;copy; [A] ``B``.txt"
     )
     md = build_evidence_markdown_v1(fls_with_config(xml))
-    assert r'path: "/Dokumente/\[Plan\](ziel).txt"' in md
+    assert '```id: "file1"; node: "n1"; path: "/Dokumente/Plan &copy; [A] ``B``.txt"; type: "text"```' in md
+
+
+@pytest.mark.parametrize(("extra_chars", "kept"), [(0, 2), (-1, 1)])
+def test_file_path_budget_is_shared_across_devices(monkeypatch, extra_chars: int, kept: int) -> None:
+    from backend.filius import topology
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    root = ET.fromstring(PEER2PEER_FILE_XML.replace(b"peer2peer", b"Archiv"))
+    root.append(ET.fromstring(ET.tostring(root.find("object"))))
+    path = "/Archiv/Nachricht.txt"
+    monkeypatch.setattr(topology, "_MAX_FILE_PATH_CHARS", 2 * len(path) + extra_chars)
+    md = build_evidence_markdown_v1(fls_with_config(ET.tostring(root)))
+
+    assert md.count(f'path: "{path}"') == kept
+    if kept == 1:
+        assert 'node: "n1"; path:' in md
+        assert "- omitted_files_path_budget: 1" in md
+    else:
+        assert "omitted_files_path_budget" not in md
+
+
+def test_conflicting_installation_is_unresolved_on_its_device() -> None:
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    xml = ET.parse("backend/tests/fixtures/filius/synthetic-dns-web/configuration.xml")
+    browser = xml.find(".//object[@class='filius.software.www.WebBrowser']")
+    browser.set("class", "filius.software.lokal.TextEditor")
+    md = build_evidence_markdown_v1(fls_with_config(ET.tostring(xml.getroot())))
+
+    browsers = [line for line in md.splitlines() if 'name: "Webbrowser"' in line]
+    assert len(browsers) == 1
+    assert 'node: "n3"' in browsers[0]
+    assert "unresolved_installations: 1" in md.split("### n2\n")[1].split("### n3")[0]

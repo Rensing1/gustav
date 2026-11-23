@@ -113,4 +113,4 @@ none
   - id: "app4"; node: "n1"; class: "filius.software.lokal.ImageViewer"; name: "Bildbetrachter"; installed: "true"; active: "unknown"; active_source: "not_persisted"
   - id: "app6"; node: "n2"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
 - files:
-  - id: "file5"; node: "n2"; path: "/test"; type: "txt"
+  - `id: "file5"; node: "n2"; path: "/test"; type: "txt"`

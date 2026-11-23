@@ -45,6 +45,7 @@ class FiliusNode:
     interfaces: tuple[FiliusInterface, ...]
     ssid: str = "unknown"
     rip_enabled: str = "unknown"
+    unresolved_installations: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +207,7 @@ class FiliusTopology:
     email_clients_without_accounts: int = 0
     unresolved_links: int = 0
     invalid_interfaces: int = 0
+    omitted_files_path_budget: int = 0
 
 
 @dataclass(slots=True)
@@ -227,6 +229,16 @@ _DNS_RE = re.compile(r"DNS-Server:[^\S\n]*(?P<value>[^\n<]*)")
 _TEXT_FILE_TYPES = {"", "html", "htm", "text", "txt", "css", "js", "conf"}
 _TEXT_FILE_SUFFIXES = (".html", ".htm", ".txt", ".css", ".js", ".conf")
 _MAX_EXTRACTED_FILE_CHARS = 4000
+_MAX_FILE_PATH_CHARS = 65_536
+
+
+@dataclass(slots=True)
+class _FileInventory:
+    """Share one path budget across all devices in a project."""
+
+    files: list[FiliusFilesystemFile]
+    remaining_path_chars: int
+    omitted: int = 0
 
 
 def extract_topology(xml_bytes: bytes) -> FiliusTopology:
@@ -240,7 +252,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
     networks: dict[tuple[str, str], list[str]] = {}
     route_rows: list[tuple[str, str, str, str, str, str]] = []
     applications: list[FiliusApplication] = []
-    filesystem_files: list[FiliusFilesystemFile] = []
+    inventory = _FileInventory([], _MAX_FILE_PATH_CHARS)
     firewalls: list[FiliusFirewall] = []
     email_clients: list[FiliusEmailClient] = []
     email_servers: list[FiliusEmailServer] = []
@@ -260,6 +272,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         device_type = _device_type(class_name or label_type)
         tooltip_interfaces = _parse_tooltip_interfaces(tooltip)
 
+        unresolved_installations = 0
         interfaces: list[FiliusInterface] = []
         if hardware is not None:
             for interface_index, interface_object in enumerate(_interface_objects(hardware), start=1):
@@ -279,12 +292,11 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
                 (node_id, f"{node_id}-r{route_index}", destination, netmask, next_hop_ip, via_ip)
                 for route_index, (destination, netmask, next_hop_ip, via_ip) in enumerate(_manual_route_rows(hardware), start=1)
             )
-            applications.extend(
-                _installed_applications(hardware, node_id=node_id, start_index=len(applications) + 1)
+            node_apps, unresolved_installations = _installed_applications(
+                hardware, node_id=node_id, start_index=len(applications) + 1
             )
-            filesystem_files.extend(
-                _filesystem_files(hardware, node_id=node_id, start_index=len(filesystem_files) + 1)
-            )
+            applications.extend(node_apps)
+            _collect_device_files(hardware, node_id=node_id, inventory=inventory)
             firewalls.extend(
                 _firewalls(hardware, node_id=node_id, start_index=len(firewalls) + 1)
             )
@@ -306,6 +318,7 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
                 label_type=label_type,
                 interfaces=tuple(interfaces),
                 ssid=_normalize_optional(_property_text(system_software, "SSID")),
+                unresolved_installations=unresolved_installations,
                 rip_enabled=_normalize_boolean(_property_text(system_software, "ripEnabled")),
             )
         )
@@ -345,7 +358,8 @@ def extract_topology(xml_bytes: bytes) -> FiliusTopology:
         derived_networks=derived_networks,
         manual_routes=manual_routes,
         applications=tuple(applications),
-        filesystem_files=tuple(filesystem_files),
+        filesystem_files=tuple(inventory.files),
+        omitted_files_path_budget=inventory.omitted,
         firewalls=tuple(firewalls),
         email_clients=tuple(email_clients),
         email_servers=tuple(email_servers),
@@ -412,15 +426,21 @@ def _manual_route_rows(hardware: ET.Element) -> list[tuple[str, str, str, str]]:
     return rows
 
 
-def _installed_applications(hardware: ET.Element, *, node_id: str, start_index: int) -> list[FiliusApplication]:
+def _installed_applications(
+    hardware: ET.Element, *, node_id: str, start_index: int
+) -> tuple[list[FiliusApplication], int]:
     system_software = _find_direct_property_element(hardware, "systemSoftware")
     installed = _find_direct_property_element(system_software, "installierteAnwendungen")
     if installed is None:
-        return []
+        return [], 0
 
+    unresolved = 0
     applications: list[FiliusApplication] = []
     for entry in installed.findall("./void"):
         class_name = _application_class_name(entry)
+        if class_name is None:
+            unresolved += 1
+            continue
         kind = _application_kind(class_name)
         app_object = entry.find("./object")
         if entry.get("method") == "put" and app_object is not None:
@@ -455,17 +475,17 @@ def _installed_applications(hardware: ET.Element, *, node_id: str, start_index: 
                 target_ip=_normalize_optional(_property_text(value_source, "zielIPAdresse")),
             )
         )
-    return applications
+    return applications, unresolved
 
 
-def _application_class_name(entry: ET.Element) -> str:
-    key = entry.find("./string")
-    if key is not None and key.text:
-        return key.text.strip()
+def _application_class_name(entry: ET.Element) -> str | None:
+    """Return None when an explicit installation key contradicts its object."""
+    key = (entry.findtext("./string") or "").strip()
     app_object = entry.find("./object")
-    if app_object is not None:
-        return app_object.attrib.get("class") or "unknown"
-    return "unknown"
+    object_class = app_object.get("class") if app_object is not None else None
+    if entry.get("method") == "put" and key and object_class and key != object_class:
+        return None
+    return key or object_class or "unknown"
 
 
 _PROGRAM_LABELS = {
@@ -504,34 +524,21 @@ def _application_kind(class_name: str) -> str:
     return "unknown"
 
 
-def _filesystem_files(hardware: ET.Element, *, node_id: str, start_index: int) -> list[FiliusFilesystemFile]:
+def _working_directory(hardware: ET.Element) -> ET.Element | None:
     system_software = _find_direct_property_element(hardware, "systemSoftware")
     filesystem = _find_direct_property_element(system_software, "dateisystem")
-    working_directory = _find_direct_property_element(filesystem, "arbeitsVerzeichnis")
-    if working_directory is None:
-        return []
+    return _find_direct_property_element(filesystem, "arbeitsVerzeichnis")
 
-    files: list[FiliusFilesystemFile] = []
-    for root_entry in working_directory.findall("./void"):
-        node = root_entry.find("./object")
-        if node is not None:
-            _collect_filesystem_files(
-                node,
-                node_id=node_id,
-                path_parts=(),
-                files=files,
-                start_index=start_index,
-            )
-    return files
+
+def _collect_device_files(hardware: ET.Element, *, node_id: str, inventory: _FileInventory) -> None:
+    working_directory = _working_directory(hardware)
+    if working_directory is not None:
+        for node in working_directory.iterfind("./void/object"):
+            _collect_filesystem_files(node, node_id=node_id, path_parts=(), inventory=inventory)
 
 
 def _collect_filesystem_files(
-    tree_node: ET.Element,
-    *,
-    node_id: str,
-    path_parts: tuple[str, ...],
-    files: list[FiliusFilesystemFile],
-    start_index: int,
+    tree_node: ET.Element, *, node_id: str, path_parts: tuple[str, ...], inventory: _FileInventory
 ) -> None:
     user_object = _find_direct_property_element(tree_node, "userObject")
     if user_object is None:
@@ -540,16 +547,22 @@ def _collect_filesystem_files(
     file_object = user_object.find("./object")
     if file_object is not None and file_object.attrib.get("class") == "filius.software.system.Datei":
         file_name = _property_text(file_object, "name") or "unknown"
-        file_path = "/" + "/".join((*path_parts, file_name))
-        if file_name.casefold() != "konten.txt" and _valid_path_component(file_name):
-            files.append(
-                _build_filesystem_file(
-                    file_object,
-                    node_id=node_id,
-                    file_id=f"file{start_index + len(files)}",
-                    path=file_path,
-                )
+        if file_name.casefold() == "konten.txt" or not _valid_path_component(file_name):
+            return
+        # Count separators as well as names before copying a shared directory prefix.
+        path_length = len(file_name) + 1 + sum(len(part) + 1 for part in path_parts)
+        if path_length > inventory.remaining_path_chars:
+            inventory.omitted += 1
+            return
+        inventory.remaining_path_chars -= path_length
+        inventory.files.append(
+            _build_filesystem_file(
+                file_object,
+                node_id=node_id,
+                file_id=f"file{len(inventory.files) + 1}",
+                path="/" + "/".join((*path_parts, file_name)),
             )
+        )
         return
 
     folder = user_object.find("./string")
@@ -566,8 +579,7 @@ def _collect_filesystem_files(
                 child_node,
                 node_id=node_id,
                 path_parts=next_parts,
-                files=files,
-                start_index=start_index,
+                inventory=inventory,
             )
 
 
@@ -851,9 +863,17 @@ def _documentation_items(root: ET.Element) -> tuple[FiliusDocumentationItem, ...
 
 def _email_client_accounts_from_konten_file(hardware: ET.Element, *, owner_id: str) -> list[FiliusEmailAccount]:
     accounts: list[FiliusEmailAccount] = []
-    for path, content in _filesystem_text_files(hardware):
-        if path != "/konten.txt":
+    working_directory = _working_directory(hardware)
+    if working_directory is None:
+        return accounts
+    # Legacy clients persist accounts directly in /konten.txt.
+    for node in working_directory.iterfind("./void/object"):
+        file_object = _find_direct_property_object(node, "userObject")
+        if file_object is None or file_object.get("class") != "filius.software.system.Datei":
             continue
+        if _property_text(file_object, "name") != "konten.txt":
+            continue
+        content = _property_text(file_object, "dateiInhalt") or ""
         for line in content.splitlines():
             account = _build_email_account_from_konten_line(
                 line,
@@ -862,50 +882,6 @@ def _email_client_accounts_from_konten_file(hardware: ET.Element, *, owner_id: s
             if account is not None:
                 accounts.append(account)
     return accounts
-
-
-def _filesystem_text_files(hardware: ET.Element) -> list[tuple[str, str]]:
-    system_software = _find_direct_property_element(hardware, "systemSoftware")
-    filesystem = _find_direct_property_element(system_software, "dateisystem")
-    working_directory = _find_direct_property_element(filesystem, "arbeitsVerzeichnis")
-    if working_directory is None:
-        return []
-
-    files: list[tuple[str, str]] = []
-    for root_entry in working_directory.findall("./void"):
-        node = root_entry.find("./object")
-        if node is not None:
-            _collect_filesystem_text_files(node, path_parts=(), files=files)
-    return files
-
-
-def _collect_filesystem_text_files(
-    tree_node: ET.Element, *, path_parts: tuple[str, ...], files: list[tuple[str, str]]
-) -> None:
-    user_object = _find_direct_property_element(tree_node, "userObject")
-    if user_object is None:
-        return
-
-    file_object = user_object.find("./object")
-    if file_object is not None and file_object.attrib.get("class") == "filius.software.system.Datei":
-        file_name = _property_text(file_object, "name") or "unknown"
-        file_type = _property_text(file_object, "dateiTyp") or "unknown"
-        file_path = "/" + "/".join((*path_parts, file_name))
-        if _is_text_file(file_path, file_type):
-            files.append((file_path, _property_text(file_object, "dateiInhalt") or ""))
-        return
-
-    folder = user_object.find("./string")
-    folder_name = (folder.text or "").strip() if folder is not None else ""
-    if not folder_name:
-        return
-    next_parts = (*path_parts, folder_name)
-    for child_entry in tree_node.findall("./void"):
-        if child_entry.attrib.get("method") != "add":
-            continue
-        child_node = child_entry.find("./object")
-        if child_node is not None:
-            _collect_filesystem_text_files(child_node, path_parts=next_parts, files=files)
 
 
 def _build_email_account_from_konten_line(line: str, *, account_id: str) -> FiliusEmailAccount | None:

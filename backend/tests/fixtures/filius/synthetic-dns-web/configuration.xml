@@ -123,6 +123,16 @@ DNS-Server: 192.168.0.10&lt;/pre&gt;&lt;/html&gt;</string>
                   </void>
                 </object>
               </void>
+              <void method="add">
+                <object class="javax.swing.tree.DefaultMutableTreeNode">
+                  <void property="userObject">
+                    <object class="filius.software.system.Datei">
+                      <void property="name"><string>Plan &amp;copy; [A] ``B``.txt</string></void>
+                      <void property="dateiTyp"><string>text</string></void>
+                    </object>
+                  </void>
+                </object>
+              </void>
             </void>
           </void>
           <void property="installierteAnwendungen">

@@ -50,6 +50,10 @@ def _safe_text(value: object, *, max_chars: int = 2000) -> str:
     text = text.replace("\\", "\\\\").replace('"', '\\"')
     text = text.replace("<", "&lt;").replace(">", "&gt;")
     text = "\n".join(line.rstrip() for line in text.splitlines())
+    return _bounded_text(text, max_chars)
+
+
+def _bounded_text(text: str, max_chars: int) -> str:
     if len(text) > max_chars:
         text = text[:max_chars] + f" [truncated: original_chars={len(text)} shown_chars={max_chars}]"
     return text
@@ -103,6 +107,8 @@ def build_evidence_markdown_v1(fls_bytes: bytes) -> str:
             lines.append(f"- manual_routes: {len(topology.manual_routes)}")
             lines.append(f"- applications: {len(topology.applications)}")
             lines.append(f"- filesystem_files: {len(topology.filesystem_files)}")
+            if topology.omitted_files_path_budget:
+                lines.append(f"- omitted_files_path_budget: {topology.omitted_files_path_budget}")
             lines.append(f"- firewalls: {len(topology.firewalls)}")
             lines.append(f"- email_clients: {len(topology.email_clients)}")
             lines.append(f"- email_servers: {len(topology.email_servers)}")
@@ -147,6 +153,8 @@ def _render_nodes(lines: list[str], topology: FiliusTopology) -> None:
         lines.append(f'- type: "{_safe_text(node.device_type)}"')
         lines.append(f'- name: "{_safe_text(node.name)}"')
         lines.append(f'- label_type: "{_safe_text(node.label_type)}"')
+        if node.unresolved_installations:
+            lines.append(f"- unresolved_installations: {node.unresolved_installations}")
         if node.ssid != "unknown":
             lines.append(f'- ssid: "{_safe_text(node.ssid)}"')
         if node.rip_enabled != "unknown":
@@ -422,14 +430,11 @@ def _render_files(lines: list[str], files: list[FiliusFilesystemFile]) -> None:
             ("type", file.file_type),
         )
         if file.content_kind == "metadata":
-            # Display user-supplied filenames and types as single-line Markdown literals.
-            parts = []
-            for key, value in fields:
-                literal = _safe_text(" ".join(value.splitlines()))
-                for marker in ("[", "]", "*", "_", "`"):
-                    literal = literal.replace(marker, "\\" + marker)
-                parts.append(f'{key}: "{literal}"')
-            lines.append("  - " + "; ".join(parts))
+            row = "; ".join(f'{key}: "{_metadata_text(value)}"' for key, value in fields)
+            # A code span preserves entities and links. Its delimiter must outlast any in the row.
+            longest_run = max((len(run) for run in re.findall(r"`+", row)), default=0)
+            delimiter = "`" * (longest_run + 1)
+            lines.append(f"  - {delimiter}{row}{delimiter}")
             continue
         fields += (
             ("content_kind", file.content_kind),
@@ -443,3 +448,8 @@ def _render_files(lines: list[str], files: list[FiliusFilesystemFile]) -> None:
                 content = f"{content} [truncated: shown_chars={len(file.content)}]"
             parts.append(f'content: "{_safe_text(content, max_chars=5000)}"')
         lines.append("  - " + "; ".join(parts))
+
+
+def _metadata_text(value: str) -> str:
+    """Keep a literal metadata field on one line within the report's display limit."""
+    return _bounded_text(" ".join(value.splitlines()), 2000)

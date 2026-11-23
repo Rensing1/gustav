@@ -50,6 +50,7 @@ test("@feature-acceptance shows device-specific Filius evidence after upload and
     for (const node of ["n2", "n3"]) {
       await expect(evidence.locator("li").filter({ hasText: new RegExp(`^id: "app[^"]+"; node: "${node}"; class: "filius\\.software\\.www\\.WebBrowser"`) })).toHaveCount(1);
     }
+    await expect(evidence.locator("li").getByText('path: "/Plan &copy; [A] ``B``.txt"')).toBeVisible();
     await expect(evidence).toContainText("schulweb.test. A 3600 192.168.0.10");
   } finally {
     await learner.close();

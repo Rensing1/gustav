@@ -110,7 +110,7 @@ def find_matching_inflight_feedback_submission(
     return cur.fetchone()
 
 # ------------------------------------------------------------------
-def create_submission(repo, data: SubmissionInput, *, psycopg_module, sql_module, json_adapter, json_dumps, running_under_pytest, pytest_test_run_id) -> dict:
+def create_submission(repo, data: SubmissionInput, *, psycopg_module, sql_module, json_adapter, json_dumps, queue_test_metadata) -> dict:
     """Persist a student submission after enforcing membership and attempts.
 
     Why:
@@ -533,13 +533,7 @@ def create_submission(repo, data: SubmissionInput, *, psycopg_module, sql_module
                     "instruction_md": instruction_md,
                     "analysis_mode": analysis_mode,
                 }
-                if running_under_pytest():
-                    # Tag jobs created by in-process tests so a local docker worker
-                    # can be configured to ignore them (avoid race conditions).
-                    job_payload["_gustav_source"] = "pytest"
-                    test_run_id = pytest_test_run_id()
-                    if test_run_id:
-                        job_payload["_gustav_test_run_id"] = test_run_id
+                job_payload.update(queue_test_metadata())
                 queue_table = repo._resolve_queue_table(cur)
                 insert_sql = sql_module.SQL(
                     "insert into public.{} (submission_id, payload) values (%s::uuid, %s)"

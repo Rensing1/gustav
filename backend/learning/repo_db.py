@@ -93,6 +93,17 @@ def _pytest_test_run_id() -> str | None:
     return None
 
 
+def queue_test_metadata() -> dict[str, str]:
+    """Identify in-process test jobs for worker filtering and per-run cleanup."""
+    if not _running_under_pytest():
+        return {}
+    metadata = {"_gustav_source": "pytest"}
+    run_id = _pytest_test_run_id()
+    if run_id:
+        metadata["_gustav_test_run_id"] = run_id
+    return metadata
+
+
 def _default_app_login_dsn() -> str:
     """Return the local dev DSN using the app login role (e.g. gustav_app).
 
@@ -486,8 +497,7 @@ class DBLearningRepo:
             sql_module=sql,
             json_adapter=Json,
             json_dumps=json.dumps,
-            running_under_pytest=_running_under_pytest,
-            pytest_test_run_id=_pytest_test_run_id,
+            queue_test_metadata=queue_test_metadata,
         )
 
     def finalize_latest_feedback_submission(

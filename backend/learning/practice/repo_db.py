@@ -28,6 +28,7 @@ from backend.learning.practice.service import (
     PracticeReplacementConflict,
 )
 from backend.learning.repo_db import _dsn as learning_dsn
+from backend.learning.repo_db import queue_test_metadata
 
 
 def _uuid(value: str) -> str:
@@ -589,6 +590,7 @@ class DBPracticeRepo:
                     "instruction_md": instruction_md,
                     "analysis_mode": "text_direct",
                     "practice_attempt_id": attempt_id,
+                    **queue_test_metadata(),
                 }
                 cur.execute(
                     "insert into public.learning_submission_jobs (submission_id, payload) values (%s::uuid, %s)",

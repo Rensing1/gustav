@@ -17,6 +17,7 @@ from backend.learning.practice.repo_db import DBPracticeRepo
 from backend.learning.practice.service import ActivePracticeSessionError, PracticeService
 from backend.learning.repo_db import DBLearningRepo
 from backend.tests.utils.db import require_db_or_skip
+from backend.tests.utils.db_isolation import current_test_run_id
 
 pytest.importorskip("psycopg")
 import psycopg  # type: ignore  # noqa: E402
@@ -35,6 +36,7 @@ def _app_dsn() -> str:
 def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_state(monkeypatch) -> None:
     require_db_or_skip()
     student = f"practice-roundtrip-{uuid4()}"
+    other_student = f"practice-roundtrip-{uuid4()}"
     teacher = f"teacher-{uuid4()}"
     ids: dict[str, object] = {}
     with psycopg.connect(_admin_dsn()) as conn:
@@ -44,7 +46,10 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
                 (teacher,),
             )
             ids["course"] = cur.fetchone()[0]
-            cur.execute("insert into public.course_memberships (course_id, student_id) values (%s, %s)", (ids["course"], student))
+            cur.executemany(
+                "insert into public.course_memberships (course_id, student_id) values (%s, %s)",
+                [(ids["course"], student), (ids["course"], other_student)],
+            )
             cur.execute("insert into public.units (title, author_id, unit_type) values ('Practice unit', %s, 'modular') returning id", (teacher,))
             ids["unit"] = cur.fetchone()[0]
             cur.execute("insert into public.course_modules (course_id, unit_id, position) values (%s, %s, 1)", (ids["course"], ids["unit"]))
@@ -125,6 +130,17 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
             student, exam_session["id"], exam_session["current_item"]["id"],
             answer_text="Antwort vor dem Wechsel", idempotency_key="before-switch",
         )
+        with psycopg.connect(_admin_dsn()) as conn:
+            job = conn.execute(
+                """
+                select job.payload->>'_gustav_source', job.payload->>'_gustav_test_run_id'
+                  from public.learning_submission_jobs job
+                  join public.learning_practice_attempts attempt using (submission_id)
+                 where attempt.id = %s
+                """,
+                (attempt["attempt_id"],),
+            ).fetchone()
+        assert job == ("pytest", current_test_run_id())
         payload = {
             "mode": "exam", "stacks": selection,
             "replace_active_session_id": exam_session["id"],
@@ -136,6 +152,12 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
 
         stale = start({**payload, "replace_active_session_id": str(uuid4())})
         assert (stale.status_code, stale.json()["detail"]) == (409, "practice_session_changed")
+        other_session = service.create_session(other_student, mode="exam", stacks=selection)
+        foreign = start({**payload, "replace_active_session_id": other_session["id"]})
+        assert (foreign.status_code, foreign.json()["detail"]) == (409, "practice_session_changed")
+        assert service.get_active_session(student)["id"] == exam_session["id"]
+        assert service.get_active_session(other_student)["id"] == other_session["id"]
+
         missing = start({
             **payload,
             "stacks": [{**selection[0], "practice_module_id": str(uuid4())}],
@@ -199,6 +221,10 @@ def test_practice_due_and_exam_snapshots_are_persisted_and_skip_is_noop_for_stat
     finally:
         with psycopg.connect(_admin_dsn()) as conn:
             with conn.cursor() as cur:
+                cur.execute(
+                    "delete from public.learning_practice_sessions where student_sub in (%s, %s)",
+                    (student, other_student),
+                )
                 cur.execute("delete from public.learning_submissions where student_sub=%s", (student,))
                 cur.execute("delete from public.courses where id=%s", (ids["course"],))
                 cur.execute("delete from public.units where id=%s", (ids["unit"],))

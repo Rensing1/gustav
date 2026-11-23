@@ -74,13 +74,15 @@ class PracticeRepoProtocol(Protocol):
     ) -> dict: ...
 
 
-def _selection(stacks: object) -> list[dict[str, str]]:
+def _selection(stacks: object, *, replacing: bool) -> list[dict[str, str]]:
     if isinstance(stacks, (str, bytes)) or not isinstance(stacks, Sequence):
         raise ValueError("invalid_practice_stacks")
     if not stacks:
         raise ValueError("invalid_practice_stacks")
     if len(stacks) > MAX_SELECTED_STACKS:
         raise ValueError("too_many_stacks")
+    if replacing and len(stacks) != 1:
+        raise ValueError("invalid_practice_replacement")
 
     result: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
@@ -116,10 +118,10 @@ class PracticeService:
         normalized_mode = str(mode or "").strip().lower()
         if normalized_mode not in {"due", "exam"}:
             raise ValueError("invalid_practice_mode")
-        selection = _selection(stacks)
+        selection = _selection(stacks, replacing=replace_active_session_id is not None)
         replacement = None
         if replace_active_session_id is not None:
-            if not isinstance(replace_active_session_id, str) or len(selection) != 1:
+            if not isinstance(replace_active_session_id, str):
                 raise ValueError("invalid_practice_replacement")
             try:
                 replacement = str(UUID(replace_active_session_id))

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
+import yaml
+from jsonschema import Draft4Validator
 
 from backend.learning.practice.service import PracticeService
 
@@ -113,17 +117,41 @@ def test_h5p_completion_rejects_invalid_scores_or_missing_token() -> None:
         )
 
 
-def test_replacement_identifies_one_target_stack() -> None:
+@pytest.fixture(scope="module")
+def session_create_validator() -> Draft4Validator:
+    path = Path(__file__).resolve().parents[2] / "api/openapi.yml"
+    spec = yaml.safe_load(path.read_text(encoding="utf-8"))
+    operation = spec["paths"]["/api/learning/practice/sessions"]["post"]
+    schema = operation["requestBody"]["content"]["application/json"]["schema"]
+    return Draft4Validator({**schema, "components": spec["components"]})
+
+
+@pytest.mark.parametrize(("module_ids", "replace", "valid"), [
+    ([1], False, True),
+    ([1, 2], False, True),
+    ([1], True, True),
+    ([1, 2], True, False),
+    ([1, 1], True, False),
+])
+def test_schema_and_service_agree_on_session_selection(session_create_validator, module_ids, replace, valid) -> None:
+    course_id = str(uuid4())
+    payload = {
+        "mode": "due",
+        "stacks": [
+            {"course_id": course_id, "practice_module_id": str(UUID(int=module_id))}
+            for module_id in module_ids
+        ],
+    }
+    if replace:
+        payload["replace_active_session_id"] = str(uuid4())
+    assert session_create_validator.is_valid(payload) is valid
+
     repo = Repo()
     service = PracticeService(repo)
-    previous = "11111111-1111-1111-1111-111111111111"
-    target = {"course_id": "course-1", "practice_module_id": "module-1"}
-    service.create_session("student-1", mode="due", stacks=[target], replace_active_session_id=previous)
-    assert repo.created["replace_active_session_id"] == previous
-
-    with pytest.raises(ValueError, match="invalid_practice_replacement"):
-        service.create_session(
-            "student-1", mode="due",
-            stacks=[target, {**target, "practice_module_id": "module-2"}],
-            replace_active_session_id=previous,
-        )
+    if valid:
+        service.create_session("student-1", **payload)
+        assert repo.created["stacks"] == payload["stacks"]
+        assert repo.created["replace_active_session_id"] == payload.get("replace_active_session_id")
+    else:
+        with pytest.raises(ValueError, match="invalid_practice_replacement"):
+            service.create_session("student-1", **payload)

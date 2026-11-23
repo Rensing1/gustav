@@ -41,6 +41,14 @@ function practiceH5pPackage(): Buffer {
   return execFileSync(python, ["-c", program, fixture], { cwd: projectRoot });
 }
 
+function expectModuleUrl(page: Page, stack: { courseId: string; practiceModuleId: string }) {
+  return expect(page).toHaveURL(url =>
+    url.pathname === "/learning/practice" &&
+    url.searchParams.get("course_id") === stack.courseId &&
+    url.searchParams.get("practice_module_id") === stack.practiceModuleId
+  );
+}
+
 async function pictures(page: Page, info: TestInfo, state: string) {
   for (const theme of ["light", "dark"]) {
     await setAppTheme(page, theme);
@@ -187,6 +195,7 @@ test("@feature-acceptance teacher authors and learner completes native repetitio
       await expect(
         learner.page.getByRole("heading", { name: /Sicher beantwortet|Teilweise beantwortet|Noch nicht sicher/ })
       ).toBeVisible({ timeout: 30_000 });
+      await expectModuleUrl(learner.page, seeded);
       if (active.current_item.kind === "native" && active.current_item.presentation_number === 1) {
         await learner.page.getByRole("button", { name: "Musterlösung ansehen" }).click();
         await expect(learner.page.getByRole("heading", { name: "Musterlösung", exact: true })).toBeVisible();
@@ -267,6 +276,7 @@ async function verifyModuleSwitch(teacher: Page, learner: Page) {
 
   await learner.getByRole("button", { name: "1 Aufgabe starten" }).click();
   await expect(learner.getByText("Aufgabe aus Modul B", { exact: true })).toBeVisible();
+  await expectModuleUrl(learner, b);
   const own = await (await learner.request.get(`${api}/active`)).json();
   expect(own.id).not.toBe(mixed.id);
   expect(own.stacks).toEqual([stacks[1]]);

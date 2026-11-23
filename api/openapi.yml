@@ -3842,6 +3842,11 @@ components:
       type: object
       additionalProperties: false
       required: [mode, stacks]
+      oneOf:
+        - not: { required: [replace_active_session_id] }
+        - required: [replace_active_session_id]
+          properties:
+            stacks: { maxItems: 1 }
       properties:
         mode: { type: string, enum: [due, exam] }
         stacks:

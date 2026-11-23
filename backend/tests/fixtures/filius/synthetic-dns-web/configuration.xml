@@ -46,12 +46,9 @@ DNS-Server: 192.168.0.10&lt;/pre&gt;&lt;/html&gt;</string>
                       <void property="userObject">
                         <object class="filius.software.system.Datei">
                           <void property="dateiInhalt">
-                            <string>example.test 192.168.0.10
-www.example.test 192.168.0.10</string>
+                            <string>schulweb.test. A 3600 192.168.0.10</string>
                           </void>
-                          <void property="dateiTyp">
-                            <string>text</string>
-                          </void>
+
                           <void property="name">
                             <string>hosts</string>
                           </void>
@@ -147,6 +144,40 @@ www.example.test 192.168.0.10</string>
                   <string>Web</string>
                 </void>
               </object>
+            </void>
+          </void>
+        </void>
+      </object>
+    </void>
+  </object>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="Client1">
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Notebook">
+        <void property="netzwerkInterfaces">
+          <void index="0"><void property="ip"><string>192.168.0.11</string></void></void>
+        </void>
+        <void property="systemSoftware">
+          <void property="installierteAnwendungen">
+            <void method="put">
+              <string>filius.software.www.WebBrowser</string>
+              <object class="filius.software.www.WebBrowser"/>
+            </void>
+          </void>
+        </void>
+      </object>
+    </void>
+  </object>
+  <object class="filius.gui.netzwerksicht.GUIKnotenItem" id="Client2">
+    <void property="knoten">
+      <object class="filius.hardware.knoten.Rechner">
+        <void property="netzwerkInterfaces">
+          <void index="0"><void property="ip"><string>192.168.0.12</string></void></void>
+        </void>
+        <void property="systemSoftware">
+          <void property="installierteAnwendungen">
+            <void method="put">
+              <string>filius.software.www.WebBrowser</string>
+              <object class="filius.software.www.WebBrowser"/>
             </void>
           </void>
         </void>

@@ -12,7 +12,7 @@
 - links: 7
 - derived_networks: 0
 - manual_routes: 0
-- applications: 5
+- applications: 6
 - filesystem_files: 6
 - firewalls: 0
 - email_clients: 0
@@ -125,18 +125,23 @@ none
 ## DNS
 - applications:
   - id: "app1"; node: "n2"; class: "filius.software.dns.DNSServer"; name: "unknown"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app3"; node: "n5"; class: "filius.software.dns.DNSServer"; name: "Thread-97"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app4"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-98"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app5"; node: "n8"; class: "filius.software.dns.DNSServer"; name: "Thread-99"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app4"; node: "n5"; class: "filius.software.dns.DNSServer"; name: "Thread-97"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app5"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-98"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app6"; node: "n8"; class: "filius.software.dns.DNSServer"; name: "Thread-99"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
-  - id: "file1"; node: "n2"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "83"; sha256: "499739202bde71cecf83d0db8bc6c557a0337d17bf086b3de02ee84ba078d64f"
-  - id: "file4"; node: "n5"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "46"; sha256: "382059e73f110b89d56c0e9a065c900f41f4db75b8039e0deb6d6db1b870105a"
-  - id: "file5"; node: "n7"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "67"; sha256: "6ccb12f48c502d262f6c4a60b4c2a21929530d1f8a1c5a3d1757d96b99d290c2"
-  - id: "file6"; node: "n8"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "33"; sha256: "3ffe28a08f61f2f1745758c96c2b174a1d5ebada6d8d58f7d86d05cc1d99da14"
+  - id: "file1"; node: "n2"; path: "/dns/hosts"; type: "unknown"; content_kind: "text"; size_bytes: "83"; sha256: "499739202bde71cecf83d0db8bc6c557a0337d17bf086b3de02ee84ba078d64f"; content: "filius.de. MX 3600 smtp.filius.de.
+dns-root. A 3600 141.99.5.13
+. NS 3600 dns-root."
+  - id: "file4"; node: "n5"; path: "/dns/hosts"; type: "unknown"; content_kind: "text"; size_bytes: "46"; sha256: "382059e73f110b89d56c0e9a065c900f41f4db75b8039e0deb6d6db1b870105a"; content: "dns.de. A 3600 141.99.5.14
+de. NS 3600 dns.de."
+  - id: "file5"; node: "n7"; path: "/dns/hosts"; type: "unknown"; content_kind: "text"; size_bytes: "67"; sha256: "6ccb12f48c502d262f6c4a60b4c2a21929530d1f8a1c5a3d1757d96b99d290c2"; content: "dns.filius.de. A 3600 141.99.5.15
+filius.de. NS 3600 dns.filius.de."
+  - id: "file6"; node: "n8"; path: "/dns/hosts"; type: "unknown"; content_kind: "text"; size_bytes: "33"; sha256: "3ffe28a08f61f2f1745758c96c2b174a1d5ebada6d8d58f7d86d05cc1d99da14"; content: "www.filius.de. A 3600 141.99.5.10"
 
 ## Web
 - applications:
-  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-149"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app2"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-149"; installed: "true"; active: "true"; active_source: "persisted"; use_vhost: "unknown"
+  - id: "app3"; node: "n4"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
 - files:
   - id: "file2"; node: "n3"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "556"; sha256: "dedcd01878af5e3857f6137200baafb425e585b2df168cbdfe3ea198c4e86ec3"; content: "&lt;html&gt;
   &lt;head&gt;

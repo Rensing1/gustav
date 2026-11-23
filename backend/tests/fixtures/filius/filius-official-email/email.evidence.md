@@ -12,7 +12,7 @@
 - links: 8
 - derived_networks: 0
 - manual_routes: 0
-- applications: 8
+- applications: 12
 - filesystem_files: 3
 - firewalls: 0
 - email_clients: 4
@@ -137,13 +137,21 @@ none
 
 ## DNS
 - applications:
-  - id: "app6"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-242"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app10"; node: "n7"; class: "filius.software.dns.DNSServer"; name: "Thread-242"; installed: "true"; active: "true"; active_source: "persisted"
 - files:
-  - id: "file3"; node: "n7"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "172"; sha256: "3f2713270030baf0cd7eee33f16e321655c7e94b849758a907ee26ec34e9f2be"
+  - id: "file3"; node: "n7"; path: "/dns/hosts"; type: "unknown"; content_kind: "text"; size_bytes: "172"; sha256: "3f2713270030baf0cd7eee33f16e321655c7e94b849758a907ee26ec34e9f2be"; content: "www.filius.de A 3600 141.99.50.231
+mail-filius.de A 3600 141.99.50.232
+mail-senior.de A 3600 141.99.50.233
+filius.de MX 3600 mail-filius.de
+senior.de MX 3600 mail-senior.de"
 
 ## Web
 - applications:
-  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-98"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-98"; installed: "true"; active: "true"; active_source: "persisted"; use_vhost: "unknown"
+  - id: "app2"; node: "n2"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app4"; node: "n3"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app6"; node: "n4"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app8"; node: "n5"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
 - files:
   - id: "file1"; node: "n1"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "556"; sha256: "dedcd01878af5e3857f6137200baafb425e585b2df168cbdfe3ea198c4e86ec3"; content: "&lt;html&gt;
   &lt;head&gt;

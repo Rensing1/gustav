@@ -160,9 +160,9 @@ none
 
 ## Web
 - applications:
-  - id: "app2"; node: "n2"; class: "filius.software.www.WebServer"; name: "Thread-95"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app3"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-105"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app4"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-110"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app2"; node: "n2"; class: "filius.software.www.WebServer"; name: "Thread-95"; installed: "true"; active: "true"; active_source: "persisted"; use_vhost: "unknown"
+  - id: "app3"; node: "n3"; class: "filius.software.www.WebServer"; name: "Thread-105"; installed: "true"; active: "true"; active_source: "persisted"; use_vhost: "unknown"
+  - id: "app4"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-110"; installed: "true"; active: "true"; active_source: "persisted"; use_vhost: "unknown"
 
 ## Email
 none
@@ -172,5 +172,5 @@ none
 
 ## Custom Applications
 - applications:
-  - id: "app1"; node: "n1"; class: "filius.software.lokal.Terminal"; name: "Thread-561"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app5"; node: "n5"; class: "filius.software.lokal.Terminal"; name: "Thread-562"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app1"; node: "n1"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app5"; node: "n5"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"

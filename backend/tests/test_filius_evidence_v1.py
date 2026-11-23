@@ -8,9 +8,12 @@ Intent:
 
 from __future__ import annotations
 
-import io
-import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import pytest
+
+from backend.tests.utils.filius import fls_with_config
 
 MINIMAL_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <java version="17" class="java.beans.XMLDecoder">
@@ -240,17 +243,10 @@ PEER2PEER_FILE_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def _fls_with_config(config: bytes = MINIMAL_XML) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("projekt/konfiguration.xml", config)
-    return buf.getvalue()
-
-
 def test_filius_evidence_v1_renders_stable_sections_without_raw_xml() -> None:
     from backend.filius.evidence_v1 import build_evidence_markdown_v1
 
-    md = build_evidence_markdown_v1(_fls_with_config())
+    md = build_evidence_markdown_v1(fls_with_config(MINIMAL_XML))
 
     assert md.startswith("# filius.evidence.v1")
     for heading in (
@@ -343,13 +339,13 @@ def test_filius_synthetic_dns_web_fixture_renders_safe_dns_and_web_evidence() ->
     xml = (fixture_dir / "configuration.xml").read_bytes()
     expected = (fixture_dir / "dns_web.evidence.md").read_text(encoding="utf-8")
 
-    md = build_evidence_markdown_v1(_fls_with_config(xml))
+    md = build_evidence_markdown_v1(fls_with_config(xml))
 
     assert md == expected
     assert "## DNS" in md
     assert 'class: "filius.software.dns.DNSServer"' in md
     assert 'path: "/dns/hosts"' in md
-    assert "example.test 192.168.0.10" in md
+    assert "schulweb.test. A 3600 192.168.0.10" in md
     assert "## Web" in md
     assert 'class: "filius.software.www.WebServer"' in md
     assert 'path: "/webserver/index.html"' in md
@@ -369,7 +365,7 @@ def test_filius_legacy_email_client_konten_file_renders_metadata_without_secrets
     """Older Filius clients store account metadata in root `konten.txt`."""
     from backend.filius.evidence_v1 import build_evidence_markdown_v1
 
-    md = build_evidence_markdown_v1(_fls_with_config(LEGACY_EMAIL_CLIENT_XML))
+    md = build_evidence_markdown_v1(fls_with_config(LEGACY_EMAIL_CLIENT_XML))
 
     assert "- email_clients:" in md
     assert 'accounts: "1"' in md
@@ -395,7 +391,7 @@ def test_filius_evidence_renders_app_ports_client_server_apps_node_flags_and_doc
     """Core Filius simulation facts should survive extraction into evidence."""
     from backend.filius.evidence_v1 import build_evidence_markdown_v1
 
-    md = build_evidence_markdown_v1(_fls_with_config(ENRICHED_APPLICATIONS_XML))
+    md = build_evidence_markdown_v1(fls_with_config(ENRICHED_APPLICATIONS_XML))
 
     assert 'ssid: "classroom-wifi"' in md
     assert 'rip_enabled: "true"' in md
@@ -417,7 +413,7 @@ def test_filius_evidence_renders_peer2peer_file_metadata_without_content() -> No
     """Peer-to-peer text files may be relevant, but contents stay out of evidence."""
     from backend.filius.evidence_v1 import build_evidence_markdown_v1
 
-    md = build_evidence_markdown_v1(_fls_with_config(PEER2PEER_FILE_XML))
+    md = build_evidence_markdown_v1(fls_with_config(PEER2PEER_FILE_XML))
 
     assert 'path: "/peer2peer/Nachricht.txt"' in md
     assert 'content_kind: "text"' in md
@@ -436,7 +432,7 @@ def test_filius_evidence_renders_peer2peer_file_metadata_case_insensitively() ->
         b"Nachricht.txt", b"Nachricht.TXT"
     )
 
-    md = build_evidence_markdown_v1(_fls_with_config(xml))
+    md = build_evidence_markdown_v1(fls_with_config(xml))
 
     assert 'path: "/Peer2Peer/Nachricht.TXT"' in md
     assert 'content_kind: "text"' in md
@@ -564,3 +560,72 @@ def test_filius_official_app_fixtures_keep_source_attribution() -> None:
         assert "GPL-3.0" in attribution
         assert "dcd965f6139baef4c27cc6d3cc34106f6bebda40" in attribution
         assert filename in attribution
+
+
+@pytest.mark.parametrize("last_browser", [True, False])
+def test_browser_installation_belongs_to_its_device(last_browser: bool) -> None:
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    xml = ET.parse("backend/tests/fixtures/filius/synthetic-dns-web/configuration.xml")
+    if not last_browser:
+        xml.findall(".//void[@property='installierteAnwendungen']")[-1].clear()
+    md = build_evidence_markdown_v1(fls_with_config(ET.tostring(xml.getroot())))
+    web = md.split("## Web\n")[1].split("## Email")[0]
+    browsers = [line for line in web.splitlines() if 'name: "Webbrowser"' in line]
+    assert len(browsers) == 1 + int(last_browser)
+    for index, row in enumerate(browsers, 2):
+        assert f'node: "n{index}"' in row and 'installed: "true"' in row
+        node = md.split(f"### n{index}\n")[1].split("###")[0]
+        assert f'ip: "192.168.0.{index + 9}"' in node
+
+
+@pytest.mark.parametrize(("value", "expected"), [
+    ("<boolean>true</boolean>", "true"), ("<boolean>false</boolean>", "false"),
+    ('<object idref="Boolean0"/>', "unknown"), ("", "unknown"),
+])
+def test_web_service_flags_require_saved_values(value: str, expected: str) -> None:
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    flags = "".join(f'<void property="{key}">{value}</void>' for key in ("aktiv", "useVHost")) if value else ""
+    xml = ENRICHED_APPLICATIONS_XML.replace(b'<void property="aktiv"><boolean>true</boolean></void>', flags.encode(), 1)
+    md = build_evidence_markdown_v1(fls_with_config(xml))
+    row = next(line for line in md.splitlines() if 'name: "ClassWeb"' in line)
+    assert f'active: "{expected}"' in row
+    assert f'use_vhost: "{expected}"' in row
+    if 'idref=' in value:
+        assert 'active_source: "unresolved"' in row
+
+
+@pytest.mark.parametrize(("folder", "visible"), [("Dokumente", True), ("MailServer", False)])
+def test_additional_file_metadata(folder: str, visible: bool) -> None:
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    xml = PEER2PEER_FILE_XML.replace(b"peer2peer", folder.encode())
+    md = build_evidence_markdown_v1(fls_with_config(xml))
+    assert (f'path: "/{folder}/Nachricht.txt"' in md) == visible
+    assert "Private Aufgabenbeschreibung" not in md
+
+
+def test_same_filename_on_two_clients_is_metadata_only() -> None:
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    root = ET.fromstring(PEER2PEER_FILE_XML.replace(b"peer2peer", b"Archiv"))
+    second = ET.fromstring(ET.tostring(root.find("object")))
+    root.append(second)
+    md = build_evidence_markdown_v1(fls_with_config(ET.tostring(root)))
+    rows = [line for line in md.splitlines() if 'path: "/Archiv/Nachricht.txt"' in line]
+    assert len(rows) == 2
+    for index, row in enumerate(rows, 1):
+        assert f'node: "n{index}"' in row and 'type: "text"' in row
+        assert "content:" not in row and "sha256:" not in row
+    assert "Private Aufgabenbeschreibung" not in md
+
+
+def test_markdown_in_additional_file_metadata_is_literal_text() -> None:
+    from backend.filius.evidence_v1 import build_evidence_markdown_v1
+
+    xml = PEER2PEER_FILE_XML.replace(b"peer2peer", b"Dokumente").replace(
+        b"Nachricht.txt", b"[Plan](ziel).txt"
+    )
+    md = build_evidence_markdown_v1(fls_with_config(xml))
+    assert r'path: "/Dokumente/\[Plan\](ziel).txt"' in md

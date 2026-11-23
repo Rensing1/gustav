@@ -12,7 +12,7 @@
 - links: 26
 - derived_networks: 17
 - manual_routes: 0
-- applications: 27
+- applications: 35
 - filesystem_files: 6
 - firewalls: 9
 - email_clients: 4
@@ -57,7 +57,6 @@
 - type: "router"
 - name: "Provider 1"
 - label_type: "Vermittlungsrechner"
-- rip_enabled: "true"
 - interfaces:
   - id: "n4-if1"; ip: "42.0.0.1"; netmask: "255.255.255.0"; network: "42.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "2E:E7:53:65:17:0F"; wireless: "unknown"
   - id: "n4-if2"; ip: "6.0.0.2"; netmask: "255.255.255.0"; network: "6.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "1E:27:AE:8E:77:14"; wireless: "unknown"
@@ -69,7 +68,6 @@
 - type: "router"
 - name: "unknown"
 - label_type: "Vermittlungsrechner"
-- rip_enabled: "true"
 - interfaces:
   - id: "n5-if1"; ip: "6.0.0.1"; netmask: "255.255.255.0"; network: "6.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "C5:AD:0D:4F:97:06"; wireless: "unknown"
   - id: "n5-if2"; ip: "11.0.0.1"; netmask: "255.255.255.0"; network: "11.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "E0:3F:89:38:E3:2C"; wireless: "unknown"
@@ -82,7 +80,6 @@
 - type: "router"
 - name: "unknown"
 - label_type: "Vermittlungsrechner"
-- rip_enabled: "true"
 - interfaces:
   - id: "n6-if1"; ip: "2.0.0.2"; netmask: "255.255.255.0"; network: "2.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "3A:DC:16:7C:AA:78"; wireless: "unknown"
   - id: "n6-if2"; ip: "11.0.0.2"; netmask: "255.255.255.0"; network: "11.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "91:D6:EC:3F:56:B0"; wireless: "unknown"
@@ -94,7 +91,6 @@
 - type: "router"
 - name: "unknown"
 - label_type: "Vermittlungsrechner"
-- rip_enabled: "true"
 - interfaces:
   - id: "n7-if1"; ip: "12.0.0.2"; netmask: "255.255.255.0"; network: "12.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "A2:55:52:6B:6F:27"; wireless: "unknown"
   - id: "n7-if2"; ip: "3.0.0.2"; netmask: "255.255.255.0"; network: "3.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "27:17:86:69:32:C9"; wireless: "unknown"
@@ -108,7 +104,6 @@
 - type: "router"
 - name: "unknown"
 - label_type: "Vermittlungsrechner"
-- rip_enabled: "true"
 - interfaces:
   - id: "n8-if1"; ip: "4.0.0.2"; netmask: "255.255.255.0"; network: "4.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "80:6D:2A:57:59:B2"; wireless: "unknown"
   - id: "n8-if2"; ip: "5.0.0.1"; netmask: "255.255.255.0"; network: "5.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "69:EB:EB:6E:F6:82"; wireless: "unknown"
@@ -120,7 +115,6 @@
 - type: "router"
 - name: "unknown"
 - label_type: "Vermittlungsrechner"
-- rip_enabled: "true"
 - interfaces:
   - id: "n9-if1"; ip: "5.0.0.2"; netmask: "255.255.255.0"; network: "5.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "A0:D8:AE:E8:2A:E1"; wireless: "unknown"
   - id: "n9-if2"; ip: "140.100.200.1"; netmask: "255.255.255.0"; network: "140.100.200.0/24"; gateway: "unknown"; dns: "unknown"; mac: "A2:3C:B4:FB:9D:D1"; wireless: "unknown"
@@ -250,7 +244,6 @@
 - type: "router"
 - name: "Provider 2"
 - label_type: "Vermittlungsrechner"
-- rip_enabled: "true"
 - interfaces:
   - id: "n23-if1"; ip: "43.0.0.1"; netmask: "255.255.255.0"; network: "43.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "11:EE:8E:9F:31:18"; wireless: "unknown"
   - id: "n23-if2"; ip: "15.0.0.2"; netmask: "255.255.255.0"; network: "15.0.0.0/24"; gateway: "unknown"; dns: "unknown"; mac: "B7:E7:AB:01:FE:F6"; wireless: "unknown"
@@ -385,25 +378,35 @@
 
 ## DNS
 - applications:
-  - id: "app11"; node: "n10"; class: "filius.software.dns.DNSServer"; name: "Thread-2096"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app18"; node: "n14"; class: "filius.software.dns.DNSServer"; name: "Thread-7347"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app13"; node: "n10"; class: "filius.software.dns.DNSServer"; name: "Thread-2096"; installed: "true"; active: "unknown"; active_source: "unresolved"
+  - id: "app22"; node: "n14"; class: "filius.software.dns.DNSServer"; name: "Thread-7347"; installed: "true"; active: "unknown"; active_source: "unresolved"
 - files:
-  - id: "file1"; node: "n10"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "209"; sha256: "4e1db13eb52d6893611e28eae8ec1a84d06a9fe9de641a9706d526968c23d962"
-  - id: "file6"; node: "n14"; path: "/dns/hosts"; type: "unknown"; content_kind: "binary"; size_bytes: "32"; sha256: "922d1592dbf4b6bc55a698c69070dc1fcf3b477c76b37ce4a9cf72ec12a84712"
+  - id: "file1"; node: "n10"; path: "/dns/hosts"; type: "unknown"; content_kind: "text"; size_bytes: "209"; sha256: "4e1db13eb52d6893611e28eae8ec1a84d06a9fe9de641a9706d526968c23d962"; content: "webserver.de. A 3600 120.130.140.80
+gmx.de. MX 3600 mail.gmx.de.
+mail.gmx.de. A 3600 130.100.200.25
+mail.webmail.de. A 3600 140.100.200.25
+webmail.de. MX 3600 mail.webmail.de.
+meine-schule.de. A 3600 42.0.0.10"
+  - id: "file6"; node: "n14"; path: "/dns/hosts"; type: "unknown"; content_kind: "text"; size_bytes: "32"; sha256: "922d1592dbf4b6bc55a698c69070dc1fcf3b477c76b37ce4a9cf72ec12a84712"; content: "meine-schule.de. A 3600 10.0.0.1"
 
 ## Web
 - applications:
-  - id: "app5"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-17"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app6"; node: "n5"; class: "filius.software.www.WebServer"; name: "Thread-40"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app7"; node: "n6"; class: "filius.software.www.WebServer"; name: "Thread-45"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app8"; node: "n7"; class: "filius.software.www.WebServer"; name: "Thread-50"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app9"; node: "n8"; class: "filius.software.www.WebServer"; name: "Thread-67"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app10"; node: "n9"; class: "filius.software.www.WebServer"; name: "Thread-72"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app13"; node: "n11"; class: "filius.software.www.WebServer"; name: "Thread-2362"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app17"; node: "n14"; class: "filius.software.www.WebServer"; name: "Thread-835"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app20"; node: "n15"; class: "filius.software.www.WebServer"; name: "Thread-1134"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app26"; node: "n22"; class: "filius.software.www.WebServer"; name: "Thread-9435"; installed: "true"; active: "true"; active_source: "persisted"
-  - id: "app27"; node: "n23"; class: "filius.software.www.WebServer"; name: "Thread-1713"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app3"; node: "n1"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app6"; node: "n3"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app7"; node: "n4"; class: "filius.software.www.WebServer"; name: "Thread-17"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app8"; node: "n5"; class: "filius.software.www.WebServer"; name: "Thread-40"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app9"; node: "n6"; class: "filius.software.www.WebServer"; name: "Thread-45"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app10"; node: "n7"; class: "filius.software.www.WebServer"; name: "Thread-50"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app11"; node: "n8"; class: "filius.software.www.WebServer"; name: "Thread-67"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app12"; node: "n9"; class: "filius.software.www.WebServer"; name: "Thread-72"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app16"; node: "n11"; class: "filius.software.www.WebServer"; name: "Thread-2362"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app21"; node: "n14"; class: "filius.software.www.WebServer"; name: "Thread-835"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app25"; node: "n15"; class: "filius.software.www.WebServer"; name: "Thread-1134"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app28"; node: "n16"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app31"; node: "n17"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app33"; node: "n20"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app34"; node: "n22"; class: "filius.software.www.WebServer"; name: "Thread-9435"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
+  - id: "app35"; node: "n23"; class: "filius.software.www.WebServer"; name: "Thread-1713"; installed: "true"; active: "unknown"; active_source: "unresolved"; use_vhost: "unknown"
 - files:
   - id: "file2"; node: "n11"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "499"; sha256: "ee6f3fc8f04220002649d5638eb41b57a723cf1ce135ddca395c78a187886f82"; content: "&lt;html&gt;
   &lt;head&gt;
@@ -459,11 +462,11 @@
     accounts:
       - id: "mailc4-a1"; username: "herbert"; email: "herbert@gmx.de"; pop3_server: "mail.gmx.de"; pop3_port: "110"; smtp_server: "mail.gmx.de"; smtp_port: "25"
 - email_servers:
-  - id: "mails1"; node: "n12"; name: "Thread-4564"; active: "true"; mail_domain: "gmx.de"; accounts: "2"
+  - id: "mails1"; node: "n12"; name: "Thread-4564"; active: "unknown"; mail_domain: "gmx.de"; accounts: "2"
     accounts:
       - id: "mails1-a1"; username: "herbert"; email: "herbert@gmx.de"; pop3_server: "unknown"; pop3_port: "unknown"; smtp_server: "unknown"; smtp_port: "unknown"
       - id: "mails1-a2"; username: "george"; email: "george@gmx.de"; pop3_server: "unknown"; pop3_port: "unknown"; smtp_server: "unknown"; smtp_port: "unknown"
-  - id: "mails2"; node: "n13"; name: "Thread-851"; active: "true"; mail_domain: "webmail.de"; accounts: "1"
+  - id: "mails2"; node: "n13"; name: "Thread-851"; active: "unknown"; mail_domain: "webmail.de"; accounts: "1"
     accounts:
       - id: "mails2-a1"; username: "frimp"; email: "frimp@webmail.de"; pop3_server: "unknown"; pop3_port: "unknown"; smtp_server: "unknown"; smtp_port: "unknown"
 
@@ -490,11 +493,14 @@ Subnetz"; x: "20"; y: "376"; width: "88"; height: "39"
 
 ## Custom Applications
 - applications:
-  - id: "app2"; node: "n1"; class: "filius.software.lokal.Terminal"; name: "Thread-4864"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app4"; node: "n3"; class: "filius.software.lokal.Terminal"; name: "Thread-2909"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app13"; node: "n10"; class: "filius.software.lokal.Terminal"; name: "Thread-3455"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app15"; node: "n11"; class: "filius.software.lokal.Terminal"; name: "Thread-2360"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app20"; node: "n14"; class: "filius.software.lokal.Terminal"; name: "Thread-1544"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app22"; node: "n16"; class: "filius.software.lokal.Terminal"; name: "Thread-2644"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app24"; node: "n17"; class: "filius.software.lokal.Terminal"; name: "Thread-1451"; installed: "true"; active: "unknown"; active_source: "not_persisted"
-  - id: "app25"; node: "n20"; class: "filius.software.lokal.Terminal"; name: "Thread-2601"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app2"; node: "n1"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app5"; node: "n3"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app14"; node: "n10"; class: "filius.software.lokal.TextEditor"; name: "Texteditor"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app15"; node: "n10"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app17"; node: "n11"; class: "filius.software.lokal.TextEditor"; name: "Texteditor"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app18"; node: "n11"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app23"; node: "n14"; class: "filius.software.lokal.TextEditor"; name: "Texteditor"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app24"; node: "n14"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app27"; node: "n16"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app30"; node: "n17"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app32"; node: "n20"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"

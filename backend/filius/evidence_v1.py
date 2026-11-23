@@ -276,7 +276,7 @@ def _render_dns(lines: list[str], topology: FiliusTopology) -> None:
 
 
 def _render_web(lines: list[str], topology: FiliusTopology) -> None:
-    web_apps = [app for app in topology.applications if app.kind == "web_server"]
+    web_apps = [app for app in topology.applications if app.kind in {"web_server", "web_browser"}]
     web_files = [
         file
         for file in topology.filesystem_files
@@ -376,9 +376,9 @@ def _render_custom_applications(lines: list[str], topology: FiliusTopology) -> N
     apps = [
         app
         for app in topology.applications
-        if app.kind in {"client_server_client", "client_server_server", "terminal"}
+        if app.kind in {"client_server_client", "client_server_server", "terminal", "application"}
     ]
-    files = [file for file in topology.filesystem_files if file.path.casefold().startswith("/peer2peer/")]
+    files = [file for file in topology.filesystem_files if file.content_kind == "metadata" or file.path.casefold().startswith("/peer2peer/")]
     if not apps and not files:
         lines.append("none")
         return
@@ -400,6 +400,8 @@ def _render_applications(lines: list[str], applications: list[FiliusApplication]
             ("active", app.active),
             ("active_source", app.active_source),
         ]
+        if app.kind == "web_server":
+            fields.append(("use_vhost", app.use_vhost))
         if app.port != "unknown":
             fields.append(("port", app.port))
         if app.target_ip != "unknown":
@@ -418,6 +420,18 @@ def _render_files(lines: list[str], files: list[FiliusFilesystemFile]) -> None:
             ("node", file.node_id),
             ("path", file.path),
             ("type", file.file_type),
+        )
+        if file.content_kind == "metadata":
+            # Display user-supplied filenames and types as single-line Markdown literals.
+            parts = []
+            for key, value in fields:
+                literal = _safe_text(" ".join(value.splitlines()))
+                for marker in ("[", "]", "*", "_", "`"):
+                    literal = literal.replace(marker, "\\" + marker)
+                parts.append(f'{key}: "{literal}"')
+            lines.append("  - " + "; ".join(parts))
+            continue
+        fields += (
             ("content_kind", file.content_kind),
             ("size_bytes", str(file.size_bytes)),
             ("sha256", file.sha256),

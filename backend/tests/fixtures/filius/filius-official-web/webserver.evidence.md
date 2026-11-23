@@ -12,8 +12,8 @@
 - links: 2
 - derived_networks: 0
 - manual_routes: 0
-- applications: 2
-- filesystem_files: 4
+- applications: 6
+- filesystem_files: 5
 - firewalls: 0
 - email_clients: 0
 - email_servers: 0
@@ -68,7 +68,8 @@ none
 
 ## Web
 - applications:
-  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-288"; installed: "true"; active: "true"; active_source: "persisted"
+  - id: "app1"; node: "n1"; class: "filius.software.www.WebServer"; name: "Thread-288"; installed: "true"; active: "true"; active_source: "persisted"; use_vhost: "unknown"
+  - id: "app5"; node: "n2"; class: "filius.software.www.WebBrowser"; name: "Webbrowser"; installed: "true"; active: "unknown"; active_source: "not_persisted"
 - files:
   - id: "file1"; node: "n1"; path: "/webserver/index.html"; type: "html"; content_kind: "text"; size_bytes: "442"; sha256: "93144bf4d7b2608f142074653055fb063591365d35859c2c2bc8fc9e1687d41b"; content: "&lt;html&gt;
   &lt;head&gt;
@@ -107,4 +108,9 @@ none
 
 ## Custom Applications
 - applications:
-  - id: "app3"; node: "n2"; class: "filius.software.lokal.Terminal"; name: "Thread-40"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app2"; node: "n1"; class: "filius.software.lokal.TextEditor"; name: "Texteditor"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app3"; node: "n1"; class: "filius.software.lokal.FileExplorer"; name: "Dateimanager"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app4"; node: "n1"; class: "filius.software.lokal.ImageViewer"; name: "Bildbetrachter"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+  - id: "app6"; node: "n2"; class: "filius.software.lokal.Terminal"; name: "Befehlszeile"; installed: "true"; active: "unknown"; active_source: "not_persisted"
+- files:
+  - id: "file5"; node: "n2"; path: "/test"; type: "txt"

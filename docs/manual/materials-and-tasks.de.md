@@ -62,3 +62,7 @@ Kriterien beschreiben, welche fachlichen Aspekte die KI analysieren soll. Der Le
 - [Übungsmodule](practice-modules.de.md)
 
 Technische Details: [Teaching-Referenz](../references/teaching.md) und [Learning-Referenz](../references/learning.md).
+
+## Kriterien für Filius-Aufgaben
+
+„Auf beiden Clients ist ein Webbrowser installiert“ lässt sich anhand der gespeicherten Projektdatei bewerten. In der Strukturansicht ordnet die Geräte-ID jeden Browser dem Rechner mit der jeweiligen IP-Adresse zu. Für „Die Webseite wurde erfolgreich abgerufen“ braucht es zusätzlich einen vereinbarten Nachweis aus dem Versuch, etwa eine Beobachtung mit Zieladresse und angezeigter Überschrift. Steht bei einer Diensteinstellung `unknown`, bleibt diese Einstellung für die Bewertung offen. [Filius-Parser](../references/filius-parser.md)

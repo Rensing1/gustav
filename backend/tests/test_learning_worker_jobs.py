@@ -651,7 +651,10 @@ async def test_worker_filius_fls_extracts_evidence_and_completes(
     fixture, worker_dsn, job_id, submission_id = await _prepare_submission_with_job(
         idempotency_key=f"worker-filius-fls-{uuid.uuid4().hex}"
     )
-    fls_bytes = Path("backend/tests/fixtures/filius/inf-schule-clientserver/filius_ClientServer.fls").read_bytes()
+    from backend.tests.utils.filius import fls_with_config
+
+    config = Path("backend/tests/fixtures/filius/synthetic-dns-web/configuration.xml").read_bytes()
+    fls_bytes = fls_with_config(config)
     digest = sha256(fls_bytes).hexdigest()
 
     from backend.storage.config import get_submissions_bucket
@@ -743,7 +746,9 @@ async def test_worker_filius_fls_extracts_evidence_and_completes(
     assert row is not None
     status, text_body, feedback_md, analysis_json, error_code = row
     assert status == "completed"
-    assert "filius.evidence.v1" in str(text_body)
+    assert text_body == feedback.seen_text_md
+    assert 'name: "Webbrowser"' in text_body
+    assert "schulweb.test. A 3600 192.168.0.10" in text_body
     assert "## Nodes" in str(text_body)
     assert feedback_md == "Automatische Rückmeldung auf Basis der verfügbaren Abgabe."
     assert isinstance(analysis_json, dict)

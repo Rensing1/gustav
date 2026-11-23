@@ -575,7 +575,8 @@ def _complete_queued_feedback(
                 cursor.execute(
                     """
                     select submission.id::text as submission_id,
-                           submission.text_body,
+                           submission.text_body, submission.kind, submission.mime_type,
+                           submission.storage_key, submission.size_bytes, submission.sha256,
                            job.id::text as job_id,
                            job.payload
                       from public.learning_submissions submission
@@ -603,6 +604,17 @@ def _complete_queued_feedback(
                 )
             row = rows[0]
             payload = row["payload"] if isinstance(row["payload"], dict) else {}
+            evidence = row["text_body"]
+            from backend.storage.mime_types import FILIUS_FLS_MIME
+
+            if row["mime_type"] == FILIUS_FLS_MIME:
+                from backend.learning.adapters import local_vision
+
+                # Read the uploaded archive through the same adapter as the production worker.
+                result = local_vision.build().extract(
+                    submission={**row, "id": row["submission_id"]}, job_payload={}
+                )
+                evidence = result.text_md
             criteria = payload.get("criteria") if isinstance(payload, dict) else []
             criteria = criteria if isinstance(criteria, list) else []
             analysis_json = {
@@ -629,7 +641,7 @@ def _complete_queued_feedback(
                 """,
                 (
                     row["submission_id"],
-                    row["text_body"],
+                    evidence,
                     feedback,
                     json.dumps(analysis_json),
                 ),

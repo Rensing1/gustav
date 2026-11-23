@@ -95,18 +95,19 @@ class FiliusApplication:
     active_source: str
     port: str = "unknown"
     target_ip: str = "unknown"
+    use_vhost: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
 class FiliusFilesystemFile:
-    """An allowlisted simulated file from a Filius node filesystem."""
+    """A simulated file from a Filius node filesystem."""
 
     id: str
     node_id: str
     path: str
     file_type: str
     content_kind: str
-    size_bytes: int
+    size_bytes: int | None
     sha256: str
     content: str
     truncated: bool = False
@@ -385,8 +386,6 @@ def _property_text(element: ET.Element | None, property_name: str) -> str | None
         value = next(iter(child), None)
         if value is not None and value.tag in {"string", "int", "short", "boolean"}:
             return (value.text or "").strip()
-        if value is not None and value.tag == "object" and value.attrib.get("idref") == "Boolean0":
-            return "true"
     return None
 
 
@@ -420,25 +419,39 @@ def _installed_applications(hardware: ET.Element, *, node_id: str, start_index: 
         return []
 
     applications: list[FiliusApplication] = []
-    for app_index, entry in enumerate(installed.findall("./void"), start=start_index):
+    for entry in installed.findall("./void"):
         class_name = _application_class_name(entry)
         kind = _application_kind(class_name)
+        app_object = entry.find("./object")
+        if entry.get("method") == "put" and app_object is not None:
+            if kind == "unknown" and re.fullmatch(r"filius\.software(?:\.[A-Za-z_$][\w$]*)+", class_name):
+                kind = "application"
+        elif entry.get("method") != "get" or kind == "unknown" or entry.find("./void[@property]") is None:
+            continue
         if kind == "unknown":
             continue
-        app_object = entry.find("./object")
         value_source = app_object if app_object is not None else entry
-        active = _property_text(value_source, "aktiv")
+        active = _saved_boolean(value_source, "aktiv")
+        active_source = "not_persisted"
+        if active is not None:
+            active_source = "persisted"
+        elif _find_direct_property_element(value_source, "aktiv") is not None:
+            active_source = "unresolved"
+        label = _PROGRAM_LABELS.get(class_name)
+        if kind == "application" and not label:
+            label = class_name.rsplit(".", 1)[-1]
         applications.append(
             FiliusApplication(
-                id=f"app{app_index}",
+                id=f"app{start_index + len(applications)}",
                 node_id=node_id,
                 class_name=class_name,
                 kind=kind,
-                name=_property_text(value_source, "name") or "unknown",
+                name=label or _property_text(value_source, "name") or "unknown",
                 installed="true",
                 active=active or "unknown",
-                active_source="persisted" if active is not None else "not_persisted",
+                active_source=active_source,
                 port=_normalize_optional(_property_text(value_source, "port")),
+                use_vhost=_saved_boolean(value_source, "useVHost") or "unknown",
                 target_ip=_normalize_optional(_property_text(value_source, "zielIPAdresse")),
             )
         )
@@ -455,9 +468,27 @@ def _application_class_name(entry: ET.Element) -> str:
     return "unknown"
 
 
+_PROGRAM_LABELS = {
+    "filius.software.www.WebBrowser": "Webbrowser",
+    "filius.software.lokal.Terminal": "Befehlszeile",
+    "filius.software.lokal.TextEditor": "Texteditor",
+    "filius.software.lokal.FileExplorer": "Dateimanager",
+    "filius.software.lokal.ImageViewer": "Bildbetrachter",
+}
+
+
+def _saved_boolean(element: ET.Element, name: str) -> str | None:
+    """Only a literal boolean proves a saved flag without executing XMLDecoder methods."""
+    prop = _find_direct_property_element(element, name)
+    value = prop.findtext("./boolean") if prop is not None else None
+    return value if value in {"true", "false"} else None
+
+
 def _application_kind(class_name: str) -> str:
     if class_name == "filius.software.dns.DNSServer":
         return "dns_server"
+    if class_name == "filius.software.www.WebBrowser":
+        return "web_browser"
     if class_name == "filius.software.www.WebServer":
         return "web_server"
     if class_name == "filius.software.email.EmailAnwendung":
@@ -510,7 +541,7 @@ def _collect_filesystem_files(
     if file_object is not None and file_object.attrib.get("class") == "filius.software.system.Datei":
         file_name = _property_text(file_object, "name") or "unknown"
         file_path = "/" + "/".join((*path_parts, file_name))
-        if _is_allowed_filesystem_path(file_path):
+        if file_name.casefold() != "konten.txt" and _valid_path_component(file_name):
             files.append(
                 _build_filesystem_file(
                     file_object,
@@ -523,7 +554,7 @@ def _collect_filesystem_files(
 
     folder = user_object.find("./string")
     folder_name = (folder.text or "").strip() if folder is not None else ""
-    if not folder_name:
+    if folder_name.casefold() == "mailserver" or not _valid_path_component(folder_name):
         return
     next_parts = (*path_parts, folder_name)
     for child_entry in tree_node.findall("./void"):
@@ -541,10 +572,15 @@ def _collect_filesystem_files(
 
 
 def _build_filesystem_file(file_object: ET.Element, *, node_id: str, file_id: str, path: str) -> FiliusFilesystemFile:
-    content = _property_text(file_object, "dateiInhalt") or ""
     file_type = _property_text(file_object, "dateiTyp") or "unknown"
+    if not _has_file_details(path):
+        return FiliusFilesystemFile(
+            id=file_id, node_id=node_id, path=path, file_type=file_type,
+            content_kind="metadata", size_bytes=None, sha256="", content="",
+        )
+    content = _property_text(file_object, "dateiInhalt") or ""
     raw = content.encode("utf-8")
-    content_kind = "text" if _is_text_file(path, file_type) else "binary"
+    content_kind = "text" if path == "/dns/hosts" or _is_text_file(path, file_type) else "binary"
     shown_content = ""
     truncated = False
     if content_kind == "text" and not _is_metadata_only_filesystem_path(path):
@@ -701,7 +737,7 @@ def _email_clients(hardware: ET.Element, *, node_id: str, start_index: int) -> l
                 id=client_id,
                 node_id=node_id,
                 name=_property_text(app_object, "name") or "unknown",
-                active=_property_text(app_object, "aktiv") or "unknown",
+                active=_saved_boolean(app_object, "aktiv") or "unknown",
                 accounts=tuple(accounts),
             )
         )
@@ -718,7 +754,7 @@ def _email_servers(hardware: ET.Element, *, node_id: str, start_index: int) -> l
                 id=server_id,
                 node_id=node_id,
                 name=_property_text(app_object, "name") or "unknown",
-                active=_property_text(app_object, "aktiv") or "unknown",
+                active=_saved_boolean(app_object, "aktiv") or "unknown",
                 mail_domain=mail_domain,
                 accounts=tuple(_email_server_accounts(app_object, owner_id=server_id, mail_domain=mail_domain)),
             )
@@ -908,7 +944,11 @@ def _build_email_account(
     )
 
 
-def _is_allowed_filesystem_path(path: str) -> bool:
+def _valid_path_component(name: str) -> bool:
+    return bool(name and name not in {".", ".."} and "/" not in name and "\\" not in name and name.isprintable())
+
+
+def _has_file_details(path: str) -> bool:
     return (
         path == "/dns/hosts"
         or path == "/www.conf/vhosts"

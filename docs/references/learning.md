@@ -164,3 +164,5 @@ Use Cases kennen FastAPI nicht. Repositories kapseln RLS, Transaktionen und Date
 - authentifizierte Rundläufe: `frontend/e2e/` und `backend/tests_e2e/`.
 
 Für nutzerseitige Learning-Änderungen ist `make verify-feature FEATURE=<spec-stem>` mit der im Implementierungsplan zugeordneten Spec der Abschlussnachweis.
+
+Die Parser-Referenz erklärt die Felder der Filius-Strukturansicht und ihre Herkunft im gespeicherten Projekt. [Filius-Parser](filius-parser.md)

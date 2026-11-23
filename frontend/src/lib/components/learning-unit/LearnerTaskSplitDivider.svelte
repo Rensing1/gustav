@@ -68,6 +68,10 @@
     if (!(event.currentTarget instanceof HTMLElement)) {
       return;
     }
+    // Transferring the grip's implicit capture would emit a capture loss and cancel the drag.
+    if (event.target instanceof Element && event.target.hasPointerCapture?.(event.pointerId)) {
+      return;
+    }
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId);
     } catch {

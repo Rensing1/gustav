@@ -113,31 +113,19 @@ test("@feature-detail keeps the learner task desk split and its context reachabl
     await expectNoViewportOverflow(learner.page);
 
     const contextScroll = workbench.locator(".learner-task-context__scroll");
-    const additionalMaterials = context.getByText("Weitere Materialien und eigene Abgaben", { exact: true });
+    const secondMaterial = context.getByRole("button", { name: `${seeded.secondMaterialTitle} Material`, exact: true });
     await scrollSurfaceWithKeyboard(learner.page, contextScroll, "end");
     await expect.poll(
       () => contextScroll.evaluate((surface) => surface.scrollHeight - surface.clientHeight - surface.scrollTop)
     ).toBeLessThan(2);
-    const contextGeometry = await contextScroll.evaluate((surface) => {
-      const surfaceBounds = surface.getBoundingClientRect();
-      const summary = surface.querySelector<HTMLElement>(".learner-task-context__all-materials > summary");
-      if (!summary) throw new Error("additional materials disclosure is missing");
-      const summaryBounds = summary.getBoundingClientRect();
-      return {
-        viewportHeight: window.innerHeight,
-        surfaceBottom: surfaceBounds.bottom,
-        summaryTop: summaryBounds.top,
-        summaryBottom: summaryBounds.bottom
-      };
-    });
-    expect(contextGeometry.surfaceBottom).toBeLessThanOrEqual(contextGeometry.viewportHeight + 1);
-    expect(contextGeometry.summaryTop).toBeGreaterThanOrEqual(0);
-    expect(contextGeometry.summaryBottom).toBeLessThanOrEqual(contextGeometry.viewportHeight + 1);
-    await additionalMaterials.click();
-    await expect(context.locator(".learner-task-context__all-materials")).toHaveAttribute("open", "");
-    await expect(
-      context.getByRole("button", { name: `${seeded.contextImageTitle} ein- oder ausklappen` })
-    ).toBeVisible();
+    const contextOverflow = await contextScroll.evaluate(
+      (surface) => surface.getBoundingClientRect().bottom - window.innerHeight
+    );
+    expect(contextOverflow).toBeLessThanOrEqual(1);
+    await expect(secondMaterial).toBeInViewport({ ratio: 0.99 });
+    await expect(secondMaterial).toHaveAttribute("aria-expanded", "false");
+    await secondMaterial.click();
+    await expect(secondMaterial).toHaveAttribute("aria-expanded", "true");
 
     const deskBox = await workbench.locator(".learner-task-workbench__desk").boundingBox();
     const separatorBox = await separator.boundingBox();

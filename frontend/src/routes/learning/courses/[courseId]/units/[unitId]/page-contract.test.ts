@@ -147,7 +147,7 @@ describe("learning unit route contract", () => {
     expect(routeSource).toContain("feedbackPendingTaskId");
     expect(routeSource).toContain("const fastPollAttempts = 30");
     expect(routeSource).toContain("pendingSubmissionIntent");
-    expect(routeSource).toContain("Die Rückmeldung dauert länger als üblich ...");
+    expect(routeSource).not.toContain("Die Rückmeldung dauert länger als üblich ...");
     expect(routeSource).not.toContain("Die Rückmeldung ist noch nicht fertig. Bitte prüfe den Verlauf gleich erneut.");
     expect(serverSource).toContain("moduleIdOverride");
     expect(serverSource).toContain("feedbackRequestedTaskId");

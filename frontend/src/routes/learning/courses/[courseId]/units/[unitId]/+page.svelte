@@ -1178,11 +1178,8 @@
         }
       }
 
-      if (attempt >= fastPollAttempts && feedbackStatusTaskId === taskId) {
-        feedbackStatusMessage =
-          intent === "submit"
-            ? "Die Auswertung dauert länger als üblich ..."
-            : "Die Rückmeldung dauert länger als üblich ...";
+      if (intent === "submit" && attempt >= fastPollAttempts && feedbackStatusTaskId === taskId) {
+        feedbackStatusMessage = "Die Auswertung dauert länger als üblich ...";
       }
 
       await delay(attempt >= fastPollAttempts ? 5000 : 2000);

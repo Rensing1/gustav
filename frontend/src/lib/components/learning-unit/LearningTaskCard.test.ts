@@ -1895,11 +1895,12 @@ describe("LearningTaskCard", () => {
     });
 
     expect(screen.getByRole("status")).toHaveTextContent("Rückmeldung wird erstellt ...");
+    expect(screen.getByRole("status")).toHaveTextContent("Gustav schaut sich deine Abgabe in Ruhe an. Lehn dich für einen Moment zurück.");
     expect(screen.getByRole("button", { name: "Pausieren" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Meine Abgabe" })).toBeNull();
   });
 
-  it("changes a long-running feedback request to a warning without duplicating the message", () => {
+  it("changes a long-running final submission to a warning without duplicating the message", () => {
     render(LearningTaskCard, {
       props: {
         courseId: "course-1",
@@ -1909,8 +1910,8 @@ describe("LearningTaskCard", () => {
         expanded: true,
         submissionFocused: true,
         feedbackPending: true,
-        feedbackStatusMessage: "Die Rückmeldung dauert länger als üblich ...",
-        pendingIntent: "feedback"
+        feedbackStatusMessage: "Die Auswertung dauert länger als üblich ...",
+        pendingIntent: "submit"
       }
     });
 

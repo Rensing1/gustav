@@ -43,6 +43,7 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
     const editor = learner.page.locator('.learning-markdown-editor__surface [contenteditable="true"]');
     await editor.fill(reviewedText);
 
+    await learner.page.clock.install();
     await holdProviderWorker();
     try {
       await learner.page.getByRole("button", { name: "Rückmeldung einholen" }).click();
@@ -51,6 +52,21 @@ test("@feature-acceptance finalizes a reviewed task with immediate visible progr
           .locator(".learning-task-feedback-status:visible")
           .getByText("Rückmeldung wird erstellt ...")
       ).toBeVisible();
+      const status = learner.page.locator(".learning-task-feedback-status:visible");
+      const waitingMessage = "Gustav schaut sich deine Abgabe in Ruhe an. Lehn dich für einen Moment zurück.";
+      await expect(status).toContainText(waitingMessage);
+      // The polling interval changes after 30 completed history requests.
+      let completedPolls = 0;
+      learner.page.on("response", (response) => {
+        if (response.url().includes(`/tasks/${seeded.taskId}/submissions?`) && response.ok()) {
+          completedPolls += 1;
+        }
+      });
+      await expect.poll(async () => {
+        await learner.page.clock.fastForward(5000);
+        return completedPolls;
+      }, { intervals: [100], timeout: 30_000 }).toBeGreaterThan(31);
+      await expect(status).toContainText(waitingMessage);
       await completeQueuedFeedbackDeterministically({
         courseId: seeded.courseId,
         taskId: seeded.taskId,

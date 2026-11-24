@@ -638,6 +638,9 @@
   function feedbackMessageDescription(): string | null {
     const tone = feedbackMessageTone();
     if (tone === "progress") {
+      if (feedbackPending && pendingIntent === "feedback") {
+        return "Gustav schaut sich deine Abgabe in Ruhe an. Lehn dich für einen Moment zurück.";
+      }
       return "Du kannst währenddessen in GUSTAV weiterarbeiten.";
     }
     if (tone === "warning") {
